@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenroom</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app">
+  <!-- ---------------- sidebar ---------------- -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">G</div>
+      <div>
+        <div class="title">Greenroom</div>
+        <div class="subtitle">End-to-end checks</div>
+      </div>
+    </div>
+
+    <div class="nav-section">Workspace</div>
+    <button class="nav-item" data-route="run"><span class="ico">🏠</span><span class="label">Run tests</span><span class="badge-dot" id="navRunDot"></span></button>
+    <button class="nav-item" data-route="tests"><span class="ico">🧪</span><span class="label">Tests</span></button>
+    <button class="nav-item" data-route="history"><span class="ico">📜</span><span class="label">History</span></button>
+    <button class="nav-item" data-route="share"><span class="ico">🐞</span><span class="label">Report a bug</span></button>
+
+    <div class="nav-section">Help</div>
+    <button class="nav-item" data-route="guide"><span class="ico">📖</span><span class="label">User guide</span></button>
+
+    <div class="nav-spacer"></div>
+    <button class="nav-item" data-route="settings"><span class="ico">⚙️</span><span class="label">Settings</span></button>
+  </aside>
+
+  <!-- ---------------- main ---------------- -->
+  <main class="main">
+   <div class="content">
+
+    <!-- ============ RUN ============ -->
+    <section class="page" data-page="run">
+      <div class="page-head">
+        <span class="page-icon">🏠</span>
+        <h1>Run tests</h1>
+        <p class="page-sub">Pick an environment and run the automated checks against your app.</p>
+      </div>
+
+      <div class="card" id="onboardCard" style="display:none">
+        <h2 style="margin-top:0">Getting started</h2>
+        <ul class="onboard" id="onboardList"></ul>
+      </div>
+
+      <div class="card">
+        <div class="row spread">
+          <div class="segmented" id="envPills"></div>
+          <label class="check"><input type="checkbox" id="light"> Faster run <span class="muted">(less detail)</span></label>
+        </div>
+        <div class="row" style="margin-top:18px">
+          <button class="btn primary big" id="runBtn">▶ Run tests</button>
+          <button class="btn" id="stopBtn" disabled>Stop</button>
+          <span class="pill none" id="statusPill"><span class="dot" id="statusDot"></span><span id="statusText">Ready</span></span>
+          <button class="btn sm" id="reportBtn" style="margin-left:auto" disabled>Open full report ↗</button>
+        </div>
+      </div>
+
+      <div class="card" id="resultsCard" style="display:none">
+        <div class="stat-tiles" id="statTiles"></div>
+        <div class="health" id="health">
+          <div class="bar" id="healthBar"></div>
+          <div class="cap" id="healthCap"></div>
+        </div>
+        <h2>Checks</h2>
+        <ul class="checklist" id="checklist"></ul>
+        <details class="tech">
+          <summary>Technical details (raw output)</summary>
+          <pre class="output" id="output"></pre>
+        </details>
+      </div>
+    </section>
+
+    <!-- ============ TESTS ============ -->
+    <section class="page" data-page="tests">
+      <div class="page-head">
+        <span class="page-icon">🧪</span>
+        <h1>Tests</h1>
+        <p class="page-sub">Every check available for the selected environment. Run one, run a few, or manage them.</p>
+      </div>
+      <div class="row spread" style="margin-bottom:14px">
+        <div class="segmented" id="testsEnvPills"></div>
+        <div class="row" style="gap:8px">
+          <button class="btn" id="runTagBtn" disabled title="Run all tests matching the selected tags">▶ Run by tag</button>
+          <button class="btn primary" id="runSelectedBtn" disabled>▶ Run selected</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="margin-bottom:12px"><input type="text" id="testSearch" placeholder="Search tests…" class="text"></div>
+        <div class="filterbar" id="smartFilters"></div>
+        <div class="filterbar" id="tagFilters"></div>
+        <div id="testGroups"></div>
+        <p class="empty" id="testsEmpty" style="display:none">No tests match. Clear filters, or record one below / add a <code>.spec.ts</code> file.</p>
+      </div>
+      <div class="card">
+        <h2 style="margin-top:0">Record a new test</h2>
+        <p class="small muted" style="margin-bottom:10px">Type a name, click record — a browser opens. Click through the site (log in, open a page, fill a form), then close it. Your clicks become a test.</p>
+        <div class="row">
+          <input type="text" id="recordName" placeholder="e.g. create-case-note" class="text">
+          <button class="btn" id="recordBtn">⏺ Start recording</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section class="page" data-page="history">
+      <div class="page-head">
+        <span class="page-icon">📜</span>
+        <h1>History</h1>
+        <p class="page-sub">Every past run is saved on this computer. Open any to review it.</p>
+      </div>
+      <div class="row" style="margin-bottom:12px">
+        <input type="text" id="historySearch" placeholder="Filter by environment or result…" class="text">
+      </div>
+      <div class="card">
+        <ul class="rows" id="runsList"></ul>
+        <p class="empty" id="runsEmpty">No runs yet.</p>
+      </div>
+    </section>
+
+    <!-- ============ SHARE / BUG ============ -->
+    <section class="page" data-page="share">
+      <div class="page-head">
+        <span class="page-icon">🐞</span>
+        <h1>Report a bug</h1>
+        <p class="page-sub">Bundle everything a developer needs — trace, video, screenshots, logs — into one file, or copy a ready-to-paste summary.</p>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <div style="flex:1"><label class="field">Run</label><select class="select" id="shareRun"></select></div>
+          <div style="flex:1"><label class="field">Test</label><select class="select" id="shareTest"></select></div>
+        </div>
+        <p class="empty" id="shareEmpty">Run a test first — then pick it here to share.</p>
+      </div>
+
+      <div class="card" id="shareBody" style="display:none">
+        <h2 style="margin-top:0">Summary</h2>
+        <div class="doc" id="shareSummary"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn primary" id="bundleBtn">⬇ Download bug bundle (.zip)</button>
+          <button class="btn" id="copySummaryBtn">📋 Copy summary</button>
+        </div>
+        <div class="callout" style="margin-top:14px"><span class="cIco">💡</span><span>The bundle's <code>trace.zip</code> is the gold artifact for devs — they open it at <a href="https://trace.playwright.dev" target="_blank">trace.playwright.dev</a> to replay every step with screenshots, console and network.</span></div>
+      </div>
+
+      <div class="card" id="pdfCard" style="display:none">
+        <h2 style="margin-top:0">Or export a single-snapshot PDF</h2>
+        <p class="small muted" style="margin-bottom:10px">Pick a page the test visited, or scrub the video to an exact moment, then download a one-page PDF.</p>
+        <div class="row">
+          <div style="flex:1"><label class="field">Snapshot</label><select class="select" id="pdfSnap"></select></div>
+        </div>
+        <div class="preview" id="pdfPreview"></div>
+        <div id="pdfVideoWrap" style="display:none">
+          <p class="small muted" style="margin:12px 0 0">Or scrub to the exact moment (e.g. when an error shows) and capture that frame:</p>
+          <video id="pdfVideo" class="scrub" controls preload="auto"></video>
+          <div class="row" style="margin-top:8px">
+            <button class="btn sm" id="captureFrameBtn">📸 Use this frame</button>
+            <span class="small muted" id="frameStatus"></span>
+          </div>
+        </div>
+        <canvas id="frameCanvas" style="display:none"></canvas>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="pdfBtn" disabled>⬇ Download PDF</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ GUIDE ============ -->
+    <section class="page" data-page="guide">
+      <div class="page-head">
+        <span class="page-icon">📖</span>
+        <h1>User guide</h1>
+      </div>
+      <div class="card"><div class="doc" id="guideDoc">Loading…</div></div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="page" data-page="settings">
+      <div class="page-head">
+        <span class="page-icon">⚙️</span>
+        <h1>Settings</h1>
+        <p class="page-sub">Logins, environments and appearance.</p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">Logins</h2>
+        <p class="small muted" style="margin-bottom:12px">Passwords are saved to a private file on this computer (<code>.env</code>) and are never shown again or shared. Fill in the roles you test with.</p>
+        <div id="credsList"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">Environments</h2>
+        <ul class="rows" id="envList"></ul>
+        <div class="row" style="margin-top:12px">
+          <input type="text" id="newEnvName" placeholder="name, e.g. staging" class="text" style="max-width:170px">
+          <input type="text" id="newEnvUrl" placeholder="https://staging.example.com" class="text">
+          <button class="btn" id="addEnvBtn">Add</button>
+        </div>
+        <p class="small muted" style="margin-top:8px">Adding an environment also seeds a login block for it above.</p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">Appearance</h2>
+        <div class="segmented" id="themePills">
+          <button data-theme="system" class="active">Auto</button>
+          <button data-theme="light">Light</button>
+          <button data-theme="dark">Dark</button>
+        </div>
+      </div>
+    </section>
+
+   </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

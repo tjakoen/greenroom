@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🚀 Open Test App",
+      "type": "shell",
+      "command": "npm start",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "runOptions": { "instanceLimit": 1 },
+      "detail": "Start the test app and open it in your browser (http://localhost:4321)."
+    },
+    {
+      "label": "▶ Run tests (pick environment)",
+      "type": "shell",
+      "command": "npm run menu",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "detail": "Run all tests in the terminal; pick which environment when prompted."
+    },
+    {
+      "label": "⏺ Record a new test",
+      "type": "shell",
+      "command": "npm run record",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "detail": "Open a browser and turn your clicks into a test."
+    },
+    {
+      "label": "📊 View last report",
+      "type": "shell",
+      "command": "npm run report",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "detail": "Reopen the most recent test report."
+    }
+  ]
+}

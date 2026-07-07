@@ -1,0 +1,26 @@
+# Secrets — real logins live in .env, never commit
+.env
+.env.*
+!.env.example
+
+# Your real environments (seeded from config/urls.example.json on first run).
+# Keeps your live URLs out of the open-source repo.
+config/urls.json
+
+# App-managed test metadata (group/priority/owner/notes) — local, per checkout.
+tests/tests-meta.json
+
+# Internal planning notes — kept locally, not part of the open-source repo.
+GRAIN-PLAN.md
+
+# Dependencies
+node_modules/
+
+# Playwright output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Local run history (archived reports, stays on this machine)
+runs/

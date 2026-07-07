@@ -1,0 +1,13 @@
+{
+  "playwright.reuseBrowser": true,
+  "explorer.excludeGitIgnore": false,
+  "files.exclude": {
+    "node_modules": true,
+    "test-results": true,
+    "playwright-report": true,
+    "blob-report": true,
+    "runs": true
+  },
+  "workbench.startupEditor": "readme",
+  "terminal.integrated.defaultProfile.osx": "zsh"
+}

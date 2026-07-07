@@ -1,0 +1,10 @@
+{
+  "_comment": "Template. On first run this is copied to urls.json (git-ignored, your real environments). One entry per environment: the site's base URL that tests and the recorder use. Mark exactly one \"default\": true — that's the environment used when TEST_ENV isn't set. Edit these in-app via Environments, or by hand here.",
+  "staging": {
+    "baseURL": "https://staging.example.com",
+    "default": true
+  },
+  "production": {
+    "baseURL": "https://www.example.com"
+  }
+}

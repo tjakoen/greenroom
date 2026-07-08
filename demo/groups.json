@@ -1,0 +1,3 @@
+{
+  "non-prod": { "label": "Non-prod (demo + demo2)", "envs": ["demo", "demo2"], "role": "" }
+}

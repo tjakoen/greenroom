@@ -1,0 +1,26 @@
+{
+  "tests/example-login.spec.ts::logs in as a standard user @example": {
+    "group": "Examples",
+    "priority": "P1",
+    "owner": "Greenroom",
+    "notes": "Logs into the public saucedemo store via the login('example') fixture. Zero-config green run + a template for your own login tests."
+  },
+  "tests/example-nav.spec.ts::navigates the Playwright docs @example": {
+    "group": "Examples",
+    "priority": "P2",
+    "owner": "Greenroom",
+    "notes": "No login. Navigates playwright.dev and follows a docs link — a template for public, multi-step navigation checks."
+  },
+  "tests/example-search.spec.ts::searches Wikipedia @example": {
+    "group": "Examples",
+    "priority": "P2",
+    "owner": "Greenroom",
+    "notes": "No login. Types into a search box and asserts on the results page — a template for form/search interactions."
+  },
+  "tests/example-failure.spec.ts::fails on purpose to show a red run @example": {
+    "group": "Examples",
+    "priority": "P3",
+    "owner": "Greenroom",
+    "notes": "INTENTIONALLY FAILS. Demonstrates the red dashboard, failure screenshot, video and trace / bug bundle. Do not fix."
+  }
+}

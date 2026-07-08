@@ -1,10 +1,20 @@
 {
   "_comment": "Template. On first run this is copied to urls.json (git-ignored, your real environments). One entry per environment: the site's base URL that tests and the recorder use. Mark exactly one \"default\": true — that's the environment used when TEST_ENV isn't set. Edit these in-app via Environments, or by hand here.",
-  "staging": {
-    "baseURL": "https://staging.example.com",
-    "default": true
+  "_examples": "The 'demo' / 'demo2' entries below point at safe PUBLIC sites so the committed @example tests run zero-config on a fresh clone (and let you demo a simultaneous multi-environment run). Replace them with your own staging/production URLs — those live only in git-ignored urls.json.",
+  "_login": {
+    "_comment": "How your app's login form works, so login('role') and pre-auth recording can drive it — set once here (shared by every env), or override per env by adding a \"login\" block to that env below. Selectors are Playwright locators; \"submit\" is the button's visible text (matched case-insensitively). Values live only in git-ignored urls.json.",
+    "path": "/login",
+    "username": "#email",
+    "password": "#password",
+    "submit": "Sign in"
   },
-  "production": {
-    "baseURL": "https://www.example.com"
+  "demo": {
+    "baseURL": "https://www.saucedemo.com",
+    "default": true,
+    "login": { "path": "/", "username": "#user-name", "password": "#password", "submit": "Login" }
+  },
+  "demo2": {
+    "baseURL": "https://www.saucedemo.com",
+    "login": { "path": "/", "username": "#user-name", "password": "#password", "submit": "Login" }
   }
 }

@@ -1,6 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 import * as dotenv from 'dotenv';
-import { getEnv, getEnvName } from './config/environments';
+import { getEnv, getEnvName, getSelectedEnvs, baseURLof } from './config/environments';
+
+// Custom test options this project defines (see tests/helpers/fixtures.ts).
+// `envName` tells each project which environment/site it runs against.
+type GrOptions = { envName: string };
 
 // Load optional .env (URLs overrides etc). roles.json holds logins, not this.
 dotenv.config();
@@ -16,7 +20,7 @@ const env = getEnv();
 // Set CAPTURE=light for faster runs that only keep artifacts on failure.
 const light = process.env.CAPTURE === 'light';
 
-export default defineConfig({
+export default defineConfig<GrOptions>({
   testDir: './tests',
   // Producers run one env at a time via the npm scripts; no cross-env bleed.
   fullyParallel: true,
@@ -42,10 +46,12 @@ export default defineConfig({
     navigationTimeout: 30_000,
   },
 
-  projects: [
-    {
-      name: `chromium (${getEnvName()})`,
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  // One project per selected env (TEST_ENVS) for simultaneous multi-env runs;
+  // the single-env path (TEST_ENV / default) yields exactly one project.
+  // envName tells the login fixture which environment's account to use, and the
+  // `chromium (<env>)` name is parsed by the app to attribute results per env.
+  projects: getSelectedEnvs().map((env) => ({
+    name: `chromium (${env})`,
+    use: { ...devices['Desktop Chrome'], baseURL: baseURLof(env), envName: env },
+  })),
 });

@@ -1,0 +1,94 @@
+{
+  "title": "example-login.spec.ts › logs in as a standard user @example",
+  "status": "passed",
+  "env": "demo2",
+  "project": "chromium (demo2)",
+  "browser": "chromium",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "baseURL": "https://www.saucedemo.com",
+  "durationMs": 810,
+  "error": "",
+  "snapshots": [
+    {
+      "index": 0,
+      "t": 342,
+      "url": "https://www.saucedemo.com/",
+      "title": "Swag Labs",
+      "file": "demo/test-results/example-login-logs-in-as-a-standard-user-example-chromium-demo2-/snapshot-0.png"
+    },
+    {
+      "index": 1,
+      "t": 565,
+      "url": "https://www.saucedemo.com/inventory.html",
+      "title": "Swag Labs",
+      "file": "demo/test-results/example-login-logs-in-as-a-standard-user-example-chromium-demo2-/snapshot-1.png"
+    },
+    {
+      "index": 2,
+      "t": 623,
+      "url": "https://www.saucedemo.com/inventory.html",
+      "title": "Swag Labs",
+      "file": "demo/test-results/example-login-logs-in-as-a-standard-user-example-chromium-demo2-/snapshot-2.png",
+      "final": true
+    }
+  ],
+  "console": [],
+  "network": [],
+  "consoleTimed": [],
+  "networkTimed": [],
+  "requests": [
+    {
+      "t": 223,
+      "method": "GET",
+      "status": 200,
+      "url": "https://www.saucedemo.com/",
+      "type": "document"
+    },
+    {
+      "t": 261,
+      "method": "GET",
+      "status": 200,
+      "url": "https://www.saucedemo.com/assets/index-Co7SA-g_.css",
+      "type": "stylesheet"
+    },
+    {
+      "t": 322,
+      "method": "GET",
+      "status": 200,
+      "url": "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500",
+      "type": "stylesheet"
+    },
+    {
+      "t": 389,
+      "method": "GET",
+      "status": 200,
+      "url": "https://www.saucedemo.com/assets/index-XyuNVFOR.js",
+      "type": "script"
+    },
+    {
+      "t": 513,
+      "method": "GET",
+      "status": 200,
+      "url": "https://fonts.gstatic.com/s/dmsans/v17/rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2",
+      "type": "font"
+    },
+    {
+      "t": 514,
+      "method": "GET",
+      "status": 200,
+      "url": "https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBA.woff2",
+      "type": "font"
+    },
+    {
+      "t": 520,
+      "method": "GET",
+      "status": 200,
+      "url": "https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbQ.woff2",
+      "type": "font"
+    }
+  ]
+}

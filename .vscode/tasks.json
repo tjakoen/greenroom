@@ -11,6 +11,15 @@
       "detail": "Start the test app and open it in your browser (http://localhost:4321)."
     },
     {
+      "label": "🎬 Open Demo",
+      "type": "shell",
+      "command": "npm run demo",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "runOptions": { "instanceLimit": 1 },
+      "detail": "Start Greenroom in read-only demo mode with seeded example data (http://localhost:4321)."
+    },
+    {
       "label": "▶ Run tests (pick environment)",
       "type": "shell",
       "command": "npm run menu",

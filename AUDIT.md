@@ -32,14 +32,17 @@ A user's real environments live in the git-ignored `config/urls.json`; only the 
 ```bash
 # urls.json must be git-ignored — expect a match
 grep -nE 'config/urls\.json' .gitignore || echo "MISSING: config/urls.json not git-ignored"
-# the committed example must not contain a real-looking host — expect only example.com
-grep -oE "https?://[a-z0-9.-]+" config/urls.example.json | grep -viE "example\.com" || echo "OK: only example.com hosts"
-# no hardcoded hosts in tests/interface — expect zero (tests use relative paths)
-grep -rnE "https?://[a-z0-9.-]+\.[a-z]{2,}" tests interface config/environments.ts --include=*.ts --include=*.js | grep -viE "example\.com|localhost|playwright\.dev|nodejs\.org|code\.visualstudio"
+# the committed example must not contain a real-looking host — expect only the
+# safe public demo hosts (saucedemo powers the shipped @example specs)
+grep -oE "https?://[a-z0-9.-]+" config/urls.example.json | grep -viE "example\.com|saucedemo\.com" || echo "OK: only safe public hosts"
+# no hardcoded hosts in tests/interface — expect zero (tests use relative paths;
+# the shipped @example specs use safe PUBLIC test sites by design, hence the allowlist)
+grep -rnE "https?://[a-z0-9.-]+\.[a-z]{2,}" tests interface config/environments.ts --include='*.ts' --include='*.js' | grep -viE "example\.com|localhost|playwright\.dev|nodejs\.org|code\.visualstudio|saucedemo\.com|wikipedia\.org|the-internet\.herokuapp\.com"
 ```
 
-Pass: `urls.json` is ignored, the example has only `example.com` hosts, zero hardcoded real
-hosts in code (tests navigate with relative paths against the active `baseURL`).
+Pass: `urls.json` is ignored, the committed example/config hosts are only safe public demo
+sites, zero hardcoded real hosts in code (your tests navigate with relative paths against
+the active `baseURL`; only the shipped `@example` specs may use their allowlisted public sites).
 
 ## 3. No app-under-test source in this repo
 
@@ -100,8 +103,9 @@ matches `playwright.config.ts` + `tests/helpers/fixtures.ts`.
 ```bash
 # no leftover company/app-specific brand strings in committed files — expect zero
 grep -rinE "career ?team|careeredge|spark-uat|edge tests" \
-  --include=*.md --include=*.ts --include=*.js --include=*.json --include=*.html --include=*.css \
-  --exclude-dir=node_modules --exclude-dir=runs . | grep -v "config/urls.json"
+  --include='*.md' --include='*.ts' --include='*.js' --include='*.json' --include='*.html' --include='*.css' \
+  --exclude-dir=node_modules --exclude-dir=runs --exclude-dir=.claude . \
+  | grep -vE "config/urls\.json|AUDIT\.md"
 ```
 
 Pass: no mismatch found (or each fixed in the same session), and zero brand-string hits.

@@ -7,17 +7,19 @@ const { chromium } = require('@playwright/test');
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// Playwright's error/console text carries ANSI colour codes (e.g. "\x1b[31m").
+// Strip them so the PDF shows readable text, not "[2m…[39m" garbage.
+const stripAnsi = (s) => String(s ?? '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+const clean = (s) => esc(stripAnsi(s));
+
 function buildHtml(record, snapshotIndex, opts = {}) {
   const snap = record.snapshots[snapshotIndex] || record.snapshots[record.snapshots.length - 1] || {};
-  // A captured video frame (data URL) wins over a pre-saved snapshot.
-  let imgData = opts.imageData || '';
-  let snapLabel = opts.caption || `${snap.title || '(untitled)'} — ${snap.url || ''}`;
-  if (!imgData) {
-    try {
-      imgData = 'data:image/png;base64,' + fs.readFileSync(snap.file).toString('base64');
-    } catch {
-      imgData = '';
-    }
+  const snapLabel = `${snap.title || '(untitled)'} — ${snap.url || ''}`;
+  let imgData = '';
+  try {
+    imgData = 'data:image/png;base64,' + fs.readFileSync(snap.file).toString('base64');
+  } catch {
+    imgData = '';
   }
 
   const statusColor = record.status === 'passed' ? '#16a34a' : record.status === 'failed' ? '#dc2626' : '#d97706';
@@ -38,32 +40,40 @@ function buildHtml(record, snapshotIndex, opts = {}) {
   ];
 
   const errorBlock = record.error
-    ? `<div class="err"><h2>Error</h2><pre>${esc(record.error)}</pre></div>`
+    ? `<div class="err"><h2>Error</h2><pre>${clean(record.error)}</pre></div>`
     : '';
 
-  // When a video frame was captured at a specific moment, spotlight the browser
-  // logs from around that time (±3s) so the page + its logs line up.
-  let momentBlock = '';
-  if (typeof opts.time === 'number' && (record.consoleTimed?.length || record.networkTimed?.length)) {
-    const win = 3000;
-    const at = opts.time * 1000;
-    const near = (arr) => (arr || []).filter((e) => Math.abs(e.t - at) <= win).map((e) => `${(e.t / 1000).toFixed(1)}s  ${e.line}`);
-    const c = near(record.consoleTimed);
-    const n = near(record.networkTimed);
-    momentBlock =
-      `<div class="moment"><h2>Logs around ${opts.time.toFixed(1)}s (this moment ±3s)</h2>` +
-      (c.length ? `<pre>${esc(c.join('\n'))}</pre>` : '<p class="muted">No console output in this window.</p>') +
-      (n.length ? `<pre>${esc(n.join('\n'))}</pre>` : '<p class="muted">No network issues in this window.</p>') +
-      '</div>';
+  // A moment PDF is scoped to exactly [from, to] ms — the interval since the
+  // previous screenshot, matching what the on-screen scrubber showed when the
+  // user chose to export. No other console/network dump is included: this is
+  // deliberately *only* that moment, not the whole test's logs (those live in
+  // the bug bundle's console.txt/network.txt).
+  let logsBlock;
+  const hasInterval = typeof opts.from === 'number' && typeof opts.to === 'number';
+  const hasTiming = (record.consoleTimed?.length || record.networkTimed?.length || record.requests?.length) > 0;
+  if (hasInterval && hasTiming) {
+    const within = (arr) => (arr || []).filter((e) => e.t >= opts.from && e.t <= opts.to);
+    const c = within(record.consoleTimed).map((e) => `${(e.t / 1000).toFixed(1)}s  ${e.line}`);
+    const reqs = record.requests?.length ? within(record.requests) : null;
+    const n = reqs
+      ? reqs.map((e) => `${(e.t / 1000).toFixed(1)}s  ${e.status === 0 ? 'ERR' : e.status} ${e.method} ${e.url}`)
+      : within(record.networkTimed).map((e) => `${(e.t / 1000).toFixed(1)}s  ${e.line}`);
+    logsBlock =
+      `<h2>Console — this moment</h2>` +
+      (c.length ? `<pre>${clean(c.join('\n'))}</pre>` : '<p class="muted">No console output in this window.</p>') +
+      `<h2>Network — this moment${reqs ? ` (${n.length} request${n.length === 1 ? '' : 's'})` : ' issues'}</h2>` +
+      (n.length ? `<pre>${clean(n.join('\n'))}</pre>` : '<p class="muted">No network activity in this window.</p>');
+  } else {
+    // Older runs recorded before per-line timing existed — fall back to the
+    // whole test's logs so the PDF still has something useful.
+    logsBlock =
+      (record.console?.length
+        ? `<h2>Console (${record.console.length})</h2><pre>${clean(record.console.join('\n'))}</pre>`
+        : '<h2>Console</h2><p class="muted">Nothing logged.</p>') +
+      (record.network?.length
+        ? `<h2>Network issues (${record.network.length})</h2><pre>${clean(record.network.join('\n'))}</pre>`
+        : '<h2>Network issues</h2><p class="muted">No failed or error responses.</p>');
   }
-
-  const consoleBlock = record.console?.length
-    ? `<h2>Console (${record.console.length})</h2><pre>${esc(record.console.join('\n'))}</pre>`
-    : '<h2>Console</h2><p class="muted">Nothing logged.</p>';
-
-  const networkBlock = record.network?.length
-    ? `<h2>Network issues (${record.network.length})</h2><pre>${esc(record.network.join('\n'))}</pre>`
-    : '<h2>Network issues</h2><p class="muted">No failed or error responses.</p>';
 
   const journey = record.snapshots
     .map((s) => `<li>${s.index === snap.index ? '<strong>' : ''}${esc(s.title || s.url)}${s.index === snap.index ? ' — this snapshot</strong>' : ''}</li>`)
@@ -86,8 +96,6 @@ function buildHtml(record, snapshotIndex, opts = {}) {
     pre { background: #f6f6f7; border: 1px solid #eee; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; font: 10px/1.5 ui-monospace, Menlo, monospace; }
     .muted { color: #999; }
     .err pre { background: #fef2f2; border-color: #fecaca; }
-    .moment { border: 1px solid #dbeafe; background: #f5f9ff; border-radius: 6px; padding: 4px 12px 10px; margin: 12px 0; }
-    .moment h2 { color: #1d4ed8; }
     ul.journey { margin: 4px 0 0; padding-left: 18px; }
     ul.journey li { margin: 1px 0; }
   </style></head><body>
@@ -99,10 +107,8 @@ function buildHtml(record, snapshotIndex, opts = {}) {
     ${imgData ? `<div class="shot"><img src="${imgData}"></div>` : '<p class="muted">(screenshot unavailable)</p>'}
     <table>${infoRows.map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td class="v">${esc(v)}</td></tr>`).join('')}</table>
     ${errorBlock}
-    ${momentBlock}
     <h2>Pages visited</h2><ul class="journey">${journey}</ul>
-    ${consoleBlock}
-    ${networkBlock}
+    ${logsBlock}
   </body></html>`;
 }
 

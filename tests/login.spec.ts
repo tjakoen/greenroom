@@ -1,22 +1,20 @@
 import { test, expect } from './helpers/fixtures';
-import { login } from './helpers/auth';
 
 /**
- * Example login test — a template. It logs in as a role, then checks you
- * landed somewhere past the login page.
+ * Smoke login check — confirms the `state-admin` role can sign in.
  *
- * Before this passes you need to:
- *   1. Add a login for the role in Settings → Logins (writes your .env).
- *   2. Point tests/helpers/auth.ts at your app's login form (URL + fields).
- *   3. Replace the assertion below with something true for your app.
+ * The `login` fixture is environment-aware: it reads the active environment's
+ * login form (Settings → Environments → Login form) and the state-admin
+ * credentials from your .env, fills the form, submits, and asserts you leave the
+ * login page. Run it against an env where state-admin has a login (e.g. demo-dev)
+ * — pick that env on the Run/Tests page.
  *
- * Roles are just names you choose (here 'admin'); the credential comes from
- * <ENV>_<ROLE>_USERNAME / <ENV>_<ROLE>_PASSWORD in your .env.
+ * Tagged @smoke @login so you can run it alone: Tests → Run by tag.
  */
-test.describe('Login', () => {
-  test('a user can log in @smoke @login', async ({ page }) => {
-    await login(page, 'admin');
-    // Landed off the login page → treat as signed in. Tighten to your app.
-    await expect(page).not.toHaveURL(/login/i);
-  });
+test('state-admin can log in @smoke @login', async ({ page, login }) => {
+  await login('state-admin');
+  // login() already fails if we don't leave the login page; restate it as this
+  // test's explicit assertion. Adjust to something app-specific (e.g. a nav
+  // element only visible when signed in) if you want a stronger check.
+  await expect(page).not.toHaveURL(/login/i);
 });

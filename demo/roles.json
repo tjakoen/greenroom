@@ -1,0 +1,6 @@
+{
+  "_comment": "Seeded demo role definitions. Demo mode shows all logins as configured but never stores or returns any credential values.",
+  "example": { "label": "Example (saucedemo)", "envs": "all" },
+  "admin": { "label": "Admin", "envs": "all" },
+  "student": { "label": "Student", "envs": ["demo"] }
+}

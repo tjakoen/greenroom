@@ -1,35 +1,45 @@
 import { Page, expect } from '@playwright/test';
 import { getUser } from '../../users/roles';
+import { getLoginForm } from '../../config/environments';
 
 /**
  * Log in through your app's login form using a role from your .env.
  * Works against whichever environment is active (the current TEST_ENV) —
  * page.goto uses a relative path so it hits that env's baseURL automatically.
  *
- * ▸ EDIT THIS FOR YOUR APP. The values below are placeholders: the login
- *   path, the field selectors, and the submit button name will differ per
- *   site. Use "Record a new test" to click through your real login form and
- *   copy the selectors Playwright generates.
+ * ▸ CONFIGURE THE LOGIN FORM IN THE APP, not here. The form layout (login path,
+ *   username/password selectors, submit button) is per-app DATA, resolved by
+ *   getLoginForm() from config/urls.json — set it in Settings → Environments
+ *   (per env, or once under the shared `_login` block). That keeps this helper
+ *   (and the repo) generic. Only hand-edit the flow below for exotic cases the
+ *   simple form config can't express (multi-step logins, MFA, SSO redirects).
  *
  * Usage:
  *   await login(page, 'admin');
+ *
+ * `env` is optional — when omitted the current TEST_ENV account is used. In a
+ * simultaneous multi-environment run each Playwright project passes its own env
+ * so the right per-environment account is used. Prefer the `login` test fixture
+ * (see helpers/fixtures.ts) in new specs — it wires `env` for you.
  */
-const LOGIN = {
-  path: '/login', // login page, relative to the environment's baseURL
-  usernameSelector: '#email', // the username / email input
-  passwordSelector: '#password', // the password input
-  submitName: /log ?in|sign ?in/i, // the submit button's accessible name
-};
+export async function login(page: Page, role: string, env?: string): Promise<void> {
+  const { username, password } = getUser(role, env);
+  const form = getLoginForm(env);
 
-export async function login(page: Page, role: string): Promise<void> {
-  const { username, password } = getUser(role);
+  await page.goto(form.path);
+  await page.locator(form.username).fill(username);
+  await page.locator(form.password).fill(password);
+  await page.getByRole('button', { name: form.submit }).click();
 
-  await page.goto(LOGIN.path);
-  await page.locator(LOGIN.usernameSelector).fill(username);
-  await page.locator(LOGIN.passwordSelector).fill(password);
-  await page.getByRole('button', { name: LOGIN.submitName }).click();
-
-  // Success = we left the login page. Adjust if your app redirects elsewhere
-  // or requires MFA for the account.
-  await expect(page).not.toHaveURL(new RegExp(LOGIN.path, 'i'), { timeout: 20_000 });
+  // Success = we navigated away from the login page. Compare the pathname
+  // EXACTLY (not a substring) — a root login path ("/") would otherwise match
+  // every URL and never pass. Adjust this for apps that keep the same URL after
+  // login (some SPAs) or require MFA.
+  const loginPath = new URL(form.path || '/', 'http://x').pathname;
+  await expect
+    .poll(() => { try { return new URL(page.url()).pathname; } catch { return ''; } }, {
+      timeout: 20_000,
+      message: `Login didn't leave "${loginPath}" — check the login form selectors/credentials (Settings → Environments → Login form), or adjust the success check for an MFA/SPA login.`,
+    })
+    .not.toBe(loginPath);
 }

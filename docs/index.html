@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Greenroom — Browser tests without the coding</title>
+<meta name="description" content="Point Greenroom at any live web app, click Run, and get pass/fail with screenshots, video, trace, and a one-click bug bundle. Runs locally in VS Code. No coding.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #fafafa;
+    --bg-sunken: #f4f4f5;
+    --bg-card: #ffffff;
+    --border: #e4e4e7;
+    --border-strong: #d4d4d8;
+    --text: #18181b;
+    --text-soft: #52525b;
+    --text-mute: #71717a;
+    --primary: #16a34a;
+    --primary-soft: #dcfce7;
+    --primary-ink: #14532d;
+    --danger: #dc2626;
+    --amber: #d97706;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --maxw: 1100px;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 1px 3px rgba(0,0,0,.03);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09090b;
+      --bg-soft: #0c0c0e;
+      --bg-sunken: #18181b;
+      --bg-card: #131316;
+      --border: #27272a;
+      --border-strong: #3f3f46;
+      --text: #fafafa;
+      --text-soft: #a1a1aa;
+      --text-mute: #71717a;
+      --primary: #22c55e;
+      --primary-soft: #14311f;
+      --primary-ink: #bbf7d0;
+      --danger: #f87171;
+      --amber: #fbbf24;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.3);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ---- header ---- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; }
+  .logo {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--primary); position: relative; flex: none;
+  }
+  .logo::after {
+    content: ""; position: absolute; inset: 8px;
+    border: 2px solid var(--bg); border-radius: 3px;
+  }
+  .nav-links { display: flex; align-items: center; gap: 6px; }
+  .nav-links a { color: var(--text-soft); padding: 8px 12px; border-radius: 8px; font-size: 14px; }
+  .nav-links a:hover { color: var(--text); background: var(--bg-sunken); }
+  .nav-links .ghost { display: none; }
+  @media (min-width: 720px) { .nav-links .ghost { display: inline-block; } }
+
+  /* ---- buttons ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 18px; border-radius: var(--radius); font-size: 14px; font-weight: 550;
+    border: 1px solid var(--border-strong); background: var(--bg-card); color: var(--text);
+    cursor: pointer; transition: background .15s, border-color .15s, transform .05s;
+  }
+  .btn:hover { border-color: var(--text-mute); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  @media (prefers-color-scheme: dark) { .btn.primary { color: #05140b; } }
+  .btn.primary:hover { filter: brightness(1.05); }
+
+  /* ---- hero ---- */
+  .hero { padding: 84px 0 64px; border-bottom: 1px solid var(--border); }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+    color: var(--primary-ink); background: var(--primary-soft);
+    padding: 5px 11px; border-radius: 999px; margin-bottom: 22px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); }
+  h1 {
+    font-size: clamp(34px, 6vw, 54px); line-height: 1.06; letter-spacing: -0.03em;
+    margin: 0 0 20px; max-width: 16ch; font-weight: 680;
+  }
+  .lead { font-size: clamp(17px, 2.4vw, 20px); color: var(--text-soft); max-width: 62ch; margin: 0 0 14px; }
+  .subtext { font-size: 15px; color: var(--text-mute); max-width: 60ch; margin: 0 0 30px; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
+
+  /* ---- sections ---- */
+  section { padding: 72px 0; border-bottom: 1px solid var(--border); }
+  .sec-head { max-width: 60ch; margin-bottom: 40px; }
+  .sec-head h2 { font-size: clamp(24px, 3.5vw, 32px); letter-spacing: -0.02em; margin: 0 0 12px; font-weight: 660; }
+  .sec-head p { color: var(--text-soft); margin: 0; font-size: 16px; }
+  .kicker { font-size: 12.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); margin: 0 0 12px; }
+
+  /* ---- feature grid ---- */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 22px; box-shadow: var(--shadow);
+  }
+  .card h3 { font-size: 16px; margin: 0 0 8px; letter-spacing: -0.01em; font-weight: 620; }
+  .card p { margin: 0; color: var(--text-soft); font-size: 14.5px; }
+  .ic {
+    width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center;
+    background: var(--bg-sunken); border: 1px solid var(--border); color: var(--primary); margin-bottom: 16px;
+  }
+  .ic svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---- how it works ---- */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; counter-reset: step; }
+  .step { position: relative; padding-top: 8px; }
+  .step .num {
+    width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 650; font-size: 15px; background: var(--primary-soft); color: var(--primary-ink);
+    border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); margin-bottom: 14px;
+  }
+  .step h3 { margin: 0 0 6px; font-size: 16.5px; letter-spacing: -0.01em; }
+  .step p { margin: 0; color: var(--text-soft); font-size: 14.5px; }
+
+  /* ---- screenshots ---- */
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  figure { margin: 0; }
+  .frame {
+    border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
+    background: var(--bg-sunken); box-shadow: var(--shadow);
+  }
+  .frame img {
+    display: block; width: 100%; height: auto; min-height: 200px;
+    background:
+      repeating-linear-gradient(45deg, transparent, transparent 11px, color-mix(in srgb, var(--border) 55%, transparent) 11px, color-mix(in srgb, var(--border) 55%, transparent) 12px),
+      var(--bg-sunken);
+    color: var(--text-mute); font-size: 13px;
+  }
+  figcaption { color: var(--text-mute); font-size: 13.5px; margin-top: 12px; padding: 0 2px; }
+
+  /* ---- callout ---- */
+  .callout {
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 28px; display: grid; gap: 8px;
+  }
+  .callout code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
+    background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px;
+  }
+
+  /* ---- footer ---- */
+  footer { padding: 40px 0 56px; }
+  .foot { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; color: var(--text-mute); font-size: 13.5px; }
+  .foot .brand { font-size: 14px; color: var(--text-soft); }
+  .foot .logo { width: 22px; height: 22px; }
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="wrap nav">
+    <a class="brand" href="#top"><span class="logo" aria-hidden="true"></span> Greenroom</a>
+    <div class="nav-links">
+      <a class="ghost" href="#features">Features</a>
+      <a class="ghost" href="#how">How it works</a>
+      <a href="#">GitHub</a>
+    </div>
+  </nav>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero" style="border-bottom:1px solid var(--border)">
+    <div class="wrap">
+      <span class="eyebrow"><span class="dot"></span> Local · No coding required</span>
+      <h1>Browser tests without the coding.</h1>
+      <p class="lead">Point it at any live web app. Click Run. Get pass/fail with screenshots, video, trace, and a one-click bug bundle. No coding.</p>
+      <p class="subtext">Runs on your computer, straight from VS Code — and a zero-config demo means it looks alive the moment you clone it.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="#">View on GitHub</a>
+        <a class="btn" href="#">Try the demo</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="kicker">What it does</p>
+        <h2>Everything a non-coder needs to test, and everything a developer needs to fix.</h2>
+        <p>Greenroom wraps Playwright in a calm dashboard. You supply the URLs and how to log in — it never needs your app's source.</p>
+      </div>
+      <div class="grid">
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
+          <h3>Live pass/fail dashboard</h3>
+          <p>Stat tiles, a health bar, and a live checklist update as tests run — so you see green and red the moment it happens.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></div>
+          <h3>Roles &amp; per-site logins</h3>
+          <p>Create roles and map them to sites. Logins are stored only in a private file on your machine — never committed, synced, or sent anywhere.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="15" width="7" height="5" rx="1.5"/><rect x="14" y="15" width="7" height="5" rx="1.5"/></svg></div>
+          <h3>Simultaneous multi-environment runs</h3>
+          <p>Run the same tests against dev, staging and prod at once — each with its own accounts — and read the results as a test-by-environment matrix.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/></svg></div>
+          <h3>Record tests by clicking</h3>
+          <p>A browser opens, you click through your site, and your clicks become a test. The login for the role you pick is added automatically.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7a8 4 0 0 0 16 0M4 7a8 4 0 0 1 16 0v10a8 4 0 0 1-16 0V7"/></svg></div>
+          <h3>Dynamic test data</h3>
+          <p>Recorded forms submit fresh, unique inputs every run — so a signup test never trips over "email already exists" the second time.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M10 9l4 3-4 3z"/><path d="M8 21h8"/></svg></div>
+          <h3>Video scrub &rarr; PDF</h3>
+          <p>Scrub the recording to the exact moment something broke, see the browser logs at that instant, and export a clean PDF.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></div>
+          <h3>One-click bug bundle</h3>
+          <p>Trace, video, screenshots, logs and a plain-language summary — zipped into one file that gives a developer everything to reproduce it.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/><path d="M9 13h6M9 17h4"/></svg></div>
+          <h3>Tags, metadata &amp; smart filters</h3>
+          <p>Organize tests with tags, groups, owners and priorities — then filter to what matters: failing, flaky, never-run, or slowest.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <h3>No command typing</h3>
+          <p>VS Code tasks do the work. A non-coder opens the folder, picks a task, and clicks Run — no terminal, no scripts, no setup ceremony.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="kicker">How it works</p>
+        <h2>From a URL to a shareable bug report in three steps.</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="num">1</div>
+          <h3>Pick your environment(s)</h3>
+          <p>Choose one site or several. Select dev, staging and prod together to run everywhere at once, each with its own login.</p>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <h3>Click Run</h3>
+          <p>Watch the live checklist tick over to pass or fail. Every run records screenshots, video and a full trace by default.</p>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <h3>Share a bug bundle</h3>
+          <p>Found a failure? Download the zipped bundle or export a PDF and hand a developer everything they need to fix it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREENSHOTS -->
+  <section id="screenshots">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="kicker">A look inside</p>
+        <h2>Calm, readable, built for people who don't write code.</h2>
+      </div>
+      <div class="shots">
+        <figure>
+          <div class="frame"><img src="shots/run-dashboard.png" alt="Greenroom Run page: stat tiles, a health bar and a live pass/fail checklist"></div>
+          <figcaption>The Run dashboard — stat tiles, health bar and a live checklist.</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="shots/roles.png" alt="Roles and logins settings, mapping each role to the sites it can sign in to"></div>
+          <figcaption>Roles &amp; logins — mapped to sites, stored only on your machine.</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="shots/matrix.png" alt="A test-by-environment matrix showing pass/fail per environment for a multi-environment run"></div>
+          <figcaption>The multi-environment matrix — tests down, environments across.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- CALLOUT -->
+  <section>
+    <div class="wrap">
+      <div class="callout">
+        <p class="kicker" style="margin:0">Runs locally</p>
+        <h2 style="font-size:clamp(22px,3vw,28px);letter-spacing:-0.02em;margin:2px 0 6px;font-weight:640">Open the folder in VS Code and press Run.</h2>
+        <p style="color:var(--text-soft);margin:0 0 4px;max-width:60ch">Non-coders never touch a terminal. Prefer commands? They're there too:</p>
+        <p style="margin:0"><code>npm start</code> opens the app at <code>localhost:4321</code> · <code>npm run demo</code> launches the zero-config demo.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span class="brand"><span class="logo" aria-hidden="true"></span> Greenroom</span>
+    <span>Open source · Runs locally · No data leaves your machine</span>
+  </div>
+</footer>
+
+</body>
+</html>

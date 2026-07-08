@@ -1,0 +1,193 @@
+{
+  "title": "example-failure.spec.ts › fails on purpose to show a red run @example",
+  "status": "failed",
+  "env": "demo2",
+  "project": "chromium (demo2)",
+  "browser": "chromium",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "baseURL": "https://www.saucedemo.com",
+  "durationMs": 13575,
+  "error": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator:  getByRole('heading', { level: 1 })\nExpected: \u001b[32m\"This assertion is intentionally wrong — see the comment above.\"\u001b[39m\nReceived: \u001b[31m\"Welcome to the-internet\"\u001b[39m\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for getByRole('heading', { level: 1 })\u001b[22m\n\u001b[2m    24 × locator resolved to <h1 class=\"heading\">Welcome to the-internet</h1>\u001b[22m\n\u001b[2m       - unexpected value \"Welcome to the-internet\"\u001b[22m\n",
+  "snapshots": [
+    {
+      "index": 0,
+      "t": 3334,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-0.png"
+    },
+    {
+      "index": 1,
+      "t": 4018,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-1.png"
+    },
+    {
+      "index": 2,
+      "t": 5031,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-2.png"
+    },
+    {
+      "index": 3,
+      "t": 6037,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-3.png"
+    },
+    {
+      "index": 4,
+      "t": 7034,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-4.png"
+    },
+    {
+      "index": 5,
+      "t": 8030,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-5.png"
+    },
+    {
+      "index": 6,
+      "t": 9030,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-6.png"
+    },
+    {
+      "index": 7,
+      "t": 10035,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-7.png"
+    },
+    {
+      "index": 8,
+      "t": 11047,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-8.png"
+    },
+    {
+      "index": 9,
+      "t": 12047,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-9.png"
+    },
+    {
+      "index": 10,
+      "t": 13048,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-10.png"
+    },
+    {
+      "index": 11,
+      "t": 13392,
+      "url": "https://the-internet.herokuapp.com/",
+      "title": "The Internet",
+      "file": "demo/test-results/example-failure-fails-on-purpose-to-show-a-red-run-example-chromium-demo2-/snapshot-11.png",
+      "final": true
+    }
+  ],
+  "console": [
+    "[error] Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+  ],
+  "network": [
+    "FAILED GET https://298279967.log.optimizely.com/event?a=298279967&d=298279967&y=false&n=https%3A%2F%2Fthe-internet.herokuapp.com%2F&u=oeu1783454578749r0.03284882230466957&wxhr=true&t=1783454578752&f=298349752,318188263 — net::ERR_NAME_NOT_RESOLVED"
+  ],
+  "consoleTimed": [
+    {
+      "t": 2253,
+      "line": "[error] Failed to load resource: net::ERR_NAME_NOT_RESOLVED"
+    }
+  ],
+  "networkTimed": [
+    {
+      "t": 2253,
+      "line": "FAILED GET https://298279967.log.optimizely.com/event?a=298279967&d=298279967&y=false&n=https%3A%2F%2Fthe-internet.herokuapp.com%2F&u=oeu1783454578749r0.03284882230466957&wxhr=true&t=1783454578752&f=298349752,318188263 — net::ERR_NAME_NOT_RESOLVED"
+    }
+  ],
+  "requests": [
+    {
+      "t": 1184,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/",
+      "type": "document"
+    },
+    {
+      "t": 1943,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/js/foundation/foundation.js",
+      "type": "script"
+    },
+    {
+      "t": 1945,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/css/font-awesome.css",
+      "type": "stylesheet"
+    },
+    {
+      "t": 2233,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/css/app.css",
+      "type": "stylesheet"
+    },
+    {
+      "t": 2233,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/js/vendor/298279967.js",
+      "type": "script"
+    },
+    {
+      "t": 2252,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/js/foundation/foundation.alerts.js",
+      "type": "script"
+    },
+    {
+      "t": 2253,
+      "method": "GET",
+      "status": 0,
+      "url": "https://298279967.log.optimizely.com/event?a=298279967&d=298279967&y=false&n=https%3A%2F%2Fthe-internet.herokuapp.com%2F&u=oeu1783454578749r0.03284882230466957&wxhr=true&t=1783454578752&f=298349752,318188263",
+      "type": "xhr",
+      "failed": "net::ERR_NAME_NOT_RESOLVED"
+    },
+    {
+      "t": 2472,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/img/forkme_right_green_007200.png",
+      "type": "image"
+    },
+    {
+      "t": 2758,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/js/vendor/jquery-1.11.3.min.js",
+      "type": "script"
+    },
+    {
+      "t": 3295,
+      "method": "GET",
+      "status": 200,
+      "url": "https://the-internet.herokuapp.com/js/vendor/jquery-ui-1.11.4/jquery-ui.js",
+      "type": "script"
+    }
+  ]
+}

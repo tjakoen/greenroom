@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Archived run — demo + demo2</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #fafafa; color: #18181b; display: grid; place-items: center; min-height: 100vh; }
+    @media (prefers-color-scheme: dark) { body { background: #09090b; color: #f4f4f5; } .card { background: #18181b !important; border-color: #27272a !important; } }
+    .card { max-width: 560px; margin: 24px; padding: 28px 32px; background: #fff; border: 1px solid #e4e4e7; border-radius: 14px; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    .sub { color: #71717a; margin: 0 0 18px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    td { padding: 7px 4px; border-top: 1px solid #e4e4e7; }
+    @media (prefers-color-scheme: dark) { td { border-color: #27272a; } .sub { color: #a1a1aa; } }
+    .pass { color: #16a34a; font-weight: 600; }
+    .fail { color: #dc2626; font-weight: 600; }
+    .env { color: #71717a; }
+    .note { margin-top: 18px; font-size: 13px; color: #71717a; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Archived run — demo + demo2</h1>
+    <p class="sub">2026-07-08 02:00:37 · 2 passed · 2 failed</p>
+    <table>
+      <tr><td>logs in as a standard user</td><td class="env">demo</td><td class="pass">passed</td></tr>
+      <tr><td>logs in as a standard user</td><td class="env">demo2</td><td class="pass">passed</td></tr>
+      <tr><td>fails on purpose to show a red run</td><td class="env">demo</td><td class="fail">failed</td></tr>
+      <tr><td>fails on purpose to show a red run</td><td class="env">demo2</td><td class="fail">failed</td></tr>
+    </table>
+    <p class="note">This is a seeded example report for demo mode. In a real run this page is
+      the full interactive Playwright HTML report (step-by-step trace, screenshots and console).</p>
+  </div>
+</body>
+</html>

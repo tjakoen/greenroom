@@ -1,0 +1,7 @@
+{
+  "_comment": "Template for role DEFINITIONS only — names, labels, and which environments each role applies to. On first run this seeds roles.json (git-ignored). NEVER put credentials here: usernames/passwords live only in your private .env (env-scoped <ENV>_<ROLE>_* or shared <ROLE>_*), added via Settings → Logins. 'envs' is either \"all\" (one shared login on every site) or a list like [\"demo\",\"staging\"] (a different login per site).",
+  "example": {
+    "label": "Example (saucedemo)",
+    "envs": "all"
+  }
+}

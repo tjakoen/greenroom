@@ -7,8 +7,16 @@
 # Keeps your live URLs out of the open-source repo.
 config/urls.json
 
-# App-managed test metadata (group/priority/owner/notes) — local, per checkout.
-tests/tests-meta.json
+# Role definitions (seeded from config/roles.example.json + your .env on first
+# run). Local per checkout; holds no secrets but stays out of the shared repo.
+config/roles.json
+
+# Saved site groups (named env presets). Local per checkout; no secrets.
+config/groups.json
+
+# App-managed test metadata (group/priority/owner/notes). A committed seed ships
+# the "Examples" group so a fresh clone has a populated Tests page; the app may
+# add/edit entries locally on top of it.
 
 # Internal planning notes — kept locally, not part of the open-source repo.
 GRAIN-PLAN.md
@@ -16,11 +24,12 @@ GRAIN-PLAN.md
 # Dependencies
 node_modules/
 
-# Playwright output
-test-results/
-playwright-report/
-blob-report/
-playwright/.cache/
+# Playwright output. Anchored to the repo root (leading /) so these DON'T also
+# match the committed demo/ fixtures (demo/test-results, demo/runs, …).
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # Local run history (archived reports, stays on this machine)
-runs/
+/runs/

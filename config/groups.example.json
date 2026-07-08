@@ -1,0 +1,4 @@
+{
+  "_comment": "Saved site groups: a named set of environments you run together in one click on the Run page. Optional 'role' pins which login the run uses (must be a role from roles.json). No secrets here — env + role names only. Your real groups live in git-ignored config/groups.json; edit them in-app (Settings -> Site groups).",
+  "non-prod": { "label": "Non-prod (demo + demo2)", "envs": ["demo", "demo2"], "role": "" }
+}

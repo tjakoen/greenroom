@@ -174,7 +174,6 @@ that keeps the heavy artifacts only when a test fails.
 | `.env` | Your logins/passwords (private, git-ignored) |
 | `demo/` | Seeded example data for `npm run demo` (committed, read-only) |
 | `context/` | Notes about your app for whoever writes tests (a template to fill in) |
-| `standards/` | How this repo is built + worked on with AI |
 
 ## Writing a new test
 

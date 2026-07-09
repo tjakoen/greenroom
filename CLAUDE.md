@@ -43,12 +43,13 @@ environment's `baseURL` applies.
 
 ## Start here (reading order)
 
-1. **[standards/AI-DEVELOPMENT.md](standards/AI-DEVELOPMENT.md)** — how we build with AI (the standards every change is held to). **The why.**
-2. **[standards/SESSION-LOOP.md](standards/SESSION-LOOP.md)** — session mechanics: orient, loop, memory, handoff, model economy.
-3. **[standards/AI-REPO-STANDARD.md](standards/AI-REPO-STANDARD.md)** — how this repo is structured so AI sessions compound.
-4. **[README.md](README.md)** — the user-facing guide (how they actually use the app).
+1. **The published BREAD standards index — <https://tjakoen.github.io/standards>.** How we build
+   with AI (AI-DEVELOPMENT), session mechanics (SESSION-LOOP), and voice/doc shape (VOICE,
+   NOTE-STANDARD, README-STANDARD). These are the cross-repo single source; this repo **references**
+   them and never forks them. Read the index first, then fetch only the one the task needs.
+2. **[README.md](README.md)** — the user-facing guide (how they actually use the app).
    The in-app version is **[USER-GUIDE.md](USER-GUIDE.md)** (task-based; served at `/api/guide`).
-5. **[context/frontend-structure.md](context/frontend-structure.md)** + **[context/sitemap.md](context/sitemap.md)** — the fill-in-the-blank map of the app under test.
+3. **[context/frontend-structure.md](context/frontend-structure.md)** + **[context/sitemap.md](context/sitemap.md)** — the fill-in-the-blank map of the app under test.
 
 **Single sources of truth:**
 - Environment URLs → **`config/urls.json`** (git-ignored; seeded from `config/urls.example.json` on first boot; read by both the tests and the recorder). Exactly one entry has `"default": true`. Each entry may also carry an optional **`login`** block (how that env's login form works); a top-level **`_login`** key sets the shared form used by every env that doesn't override it.

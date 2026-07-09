@@ -1,0 +1,7 @@
+{
+  "projectName": "greenroom",
+  "plansDir": "./plans",
+  "docsDirs": [
+    "./context"
+  ]
+}

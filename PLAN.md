@@ -130,6 +130,17 @@ consumer-extensible registry in grain). Door gets its OWN SSE stream, never the 
   Verify: `bun run check`; boot; curl /api/state /api/envs /api/tests /api/runs /plans
   /guide; full run + recording + bundle via old UI on new server; `bun test` on lib units;
   `bun pm ls` single-copy check.
+  **STATUS (2026-07-09): DONE + VERIFIED.** server.js (1975 lines) → 15 lib/*.ts modules
+  (paths·run-stream foundation + envs·creds·roles·groups·tests-lib·records·runner·recorder·
+  bundle·zip·pdf·ffmpeg, joining guard·binary). server.ts wires guard → PROOF/MILL → old SPA
+  at `/` → all /api/* → binary static (/report,/runs,pdf-image) → EADDRINUSE probe + 500 wrap.
+  `start`+`demo` flipped to `bun server.ts`; old entry kept as `start:legacy`. Verified: check
+  + check:legacy green, `bun test lib` 14/14, `bun pm ls` single-copy, curl battery all 200 +
+  CSRF 403, a full run (example-search→passed→archived, /report) + PDF + moment + bug-bundle
+  zip + recorder spawn→stop group-kill (no orphans/stray spec), demo write-guard. NOTE: run
+  SSE is a greenroom-owned Bun ReadableStream hub (lib/run-stream.ts) with replay-on-connect,
+  NOT batch createStream — the pinned batch Stream has no replay-on-subscribe hook and P1
+  serves the frozen app.js (§5.1). ALL WORK UNCOMMITTED on bread-migration (commit when asked).
 - **P2 — GRAIN shell + Guide + Settings.** Shell/theme/⌘K/catalog; Guide via MILL; Settings
   forms. Verify: curl /settings /guide /catalog /components.css; env/role/group edits
   byte-match old file formats; dark mode; demo mode blocks writes.

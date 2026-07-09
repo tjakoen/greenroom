@@ -9,5 +9,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "types": ["node"]
-  }
+  },
+  "//": "Legacy config for the interface/ SPA + tests/ specs (CommonJS, node types). The new bun composition root (server.ts + lib/**) is typechecked by tsconfig.next.json instead and excluded here so this config stays green during the migration.",
+  "exclude": ["node_modules", "server.ts", "lib"]
 }

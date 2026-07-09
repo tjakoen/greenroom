@@ -1,8 +1,9 @@
 # AUDIT.md — alignment runbook
 
-A repeatable check that this repo still obeys its own rules ([CLAUDE.md](CLAUDE.md) +
-[standards/](standards/)). The canon defines "aligned"; this file only references it — if a
-check and the canon disagree, the canon wins and this file gets fixed.
+A repeatable check that this repo still obeys its own rules ([CLAUDE.md](CLAUDE.md) + the
+published BREAD standards, <https://tjakoen.github.io/standards>). The canon defines "aligned";
+this file only references it — if a check and the canon disagree, the canon wins and this file
+gets fixed.
 
 Run before a commit and after any big change. Each check is a command plus a pass bar.
 Findings template: ✅ passing / ⚠️ `file:line` — what — fix-or-flag. "Done" = all green +

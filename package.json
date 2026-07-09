@@ -23,6 +23,6 @@
     "typescript": "^5.6.0"
   },
   "dependencies": {
-    "@tjakoen/pantry": "github:tjakoen/pantry#75ae4cc"
+    "@tjakoen/pantry": "github:tjakoen/pantry#c629008"
   }
 }

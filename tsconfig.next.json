@@ -1,0 +1,16 @@
+{
+  "//": "Bun-flavored config for the NEW composition root (server.ts + lib/**) and the stack it imports. bundler resolution (not nodenext) so .ts files are treated as ESM regardless of package.json type — greenroom stays CommonJS (\"type\" unset) so the legacy interface/server.js keeps working until P6. The legacy tsconfig.json still typechecks the interface/ SPA + tests/ specs until they migrate (Phase 2+); `bun run check` targets this one, `check:legacy` the old.",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["bun-types"]
+  },
+  "include": ["server.ts", "lib/**/*.ts"]
+}

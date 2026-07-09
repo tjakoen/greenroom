@@ -5,11 +5,16 @@
     "": {
       "name": "greenroom",
       "dependencies": {
+        "@tjakoen/batch": "github:tjakoen/batch#f9ecb03",
+        "@tjakoen/grain": "github:tjakoen/grain#3e94bdc",
+        "@tjakoen/mill": "github:tjakoen/mill#15fa3a5",
         "@tjakoen/pantry": "github:tjakoen/pantry#c629008",
+        "@tjakoen/proof": "github:tjakoen/proof#f06daab",
       },
       "devDependencies": {
         "@playwright/test": "^1.48.0",
         "@types/node": "^20.0.0",
+        "bun-types": "^1.3.14",
         "dotenv": "^16.4.5",
         "typescript": "^5.6.0",
       },
@@ -31,6 +36,8 @@
     "@tjakoen/standards": ["@tjakoen/standards@github:tjakoen/standards#4a3c180", {}, "tjakoen-standards-4a3c180", "sha512-rjgQ//3VJ9cvf903dgfTZSUXBwHNSLEVMPTqVC1tk82Au9w0euxmzhHJN7O8a2KhSJ0SCZvFKEdUrWFm1iTizA=="],
 
     "@types/node": ["@types/node@20.19.43", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-6oYBAi5ikg4Pl+kGsoYtawUMBT2zZMCvPNF7pVLnHZfd1zf38DRiWn/gT01RYCdUqkv7Fhr+C9ot4/tb+2sVvA=="],
+
+    "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 
     "dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
 

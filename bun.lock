@@ -5,7 +5,7 @@
     "": {
       "name": "greenroom",
       "dependencies": {
-        "@tjakoen/pantry": "github:tjakoen/pantry",
+        "@tjakoen/pantry": "github:tjakoen/pantry#75ae4cc",
       },
       "devDependencies": {
         "@playwright/test": "^1.48.0",
@@ -43,15 +43,5 @@
     "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "undici-types": ["undici-types@6.21.0", "", {}, "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="],
-
-    "@tjakoen/mill/@tjakoen/batch": ["@tjakoen/batch@github:tjakoen/batch#8da87f9", {}, "tjakoen-batch-8da87f9", "sha512-TLl3IF2EzZ0K7r3QaVey/S6upX+Z8e22/3/kghbrwAYnesLbRYgbAq7o7O1q/VF77dpYEdMRsJxvos0aFo+20A=="],
-
-    "@tjakoen/mill/@tjakoen/grain": ["@tjakoen/grain@github:tjakoen/grain#e2530fc", {}, "tjakoen-grain-e2530fc", "sha512-swdBTgD1UPPU6apKzONYR3EbPqeL9rl3WXnQehDkjA1vQ14/0cvULtr+GLJlNW6fyo8hfEh1vcxPA7JY3bZI0w=="],
-
-    "@tjakoen/proof/@tjakoen/batch": ["@tjakoen/batch@github:tjakoen/batch#8da87f9", {}, "tjakoen-batch-8da87f9", "sha512-TLl3IF2EzZ0K7r3QaVey/S6upX+Z8e22/3/kghbrwAYnesLbRYgbAq7o7O1q/VF77dpYEdMRsJxvos0aFo+20A=="],
-
-    "@tjakoen/proof/@tjakoen/grain": ["@tjakoen/grain@github:tjakoen/grain#e2530fc", {}, "tjakoen-grain-e2530fc", "sha512-swdBTgD1UPPU6apKzONYR3EbPqeL9rl3WXnQehDkjA1vQ14/0cvULtr+GLJlNW6fyo8hfEh1vcxPA7JY3bZI0w=="],
-
-    "@tjakoen/proof/@tjakoen/mill": ["@tjakoen/mill@github:tjakoen/mill#22c8cfa", { "dependencies": { "@tjakoen/batch": "github:tjakoen/batch#main", "@tjakoen/grain": "github:tjakoen/grain#main" } }, "tjakoen-mill-22c8cfa", "sha512-vcO0OidRyJGsjAKw1vfRxkUv5NwyXrJ5cS858tsNLY2gO1Hd78oIabC4l78Hv2opyCLD/VQeBPlKww512QI01g=="],
   }
 }

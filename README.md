@@ -1,4 +1,10 @@
-# Greenroom
+# 🎭 Greenroom
+
+[![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/ten-times-zero)
+![Playwright](https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white)
+![Node](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
+![Zero-dep interface](https://img.shields.io/badge/interface_deps-0-2ea44f)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 A small **local app** to run automated browser checks against your web app and review the
 results. **No coding required.** Runs entirely on your computer, from VS Code or the terminal.
@@ -205,3 +211,6 @@ Mark one environment `"default": true`.)
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+🤖 **Built with Claude, so a non-coder never has to meet a terminal.** I decided what "no coding required" has to mean, Claude typed the dashboard that keeps that promise. **I don't prompt and pray, I prompt and prove.** [How I actually work with AI, receipts and all →](https://tjakoen.github.io/notes/ten-times-zero)

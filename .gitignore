@@ -33,3 +33,6 @@ node_modules/
 
 # Local run history (archived reports, stays on this machine)
 /runs/
+
+# graphify's generated code+doc graph — regenerable, host-local
+graphify-out/

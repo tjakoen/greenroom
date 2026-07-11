@@ -32,7 +32,7 @@
     "@tjakoen/batch": "github:tjakoen/batch#f9ecb03",
     "@tjakoen/grain": "github:tjakoen/grain#3e94bdc",
     "@tjakoen/mill": "github:tjakoen/mill#15fa3a5",
-    "@tjakoen/pantry": "github:tjakoen/pantry#c629008",
+    "@tjakoen/pantry": "github:tjakoen/pantry#b7d75dc",
     "@tjakoen/proof": "github:tjakoen/proof#f06daab"
   }
 }

@@ -46,6 +46,7 @@ import { buildPdf } from "./lib/pdf.ts";
 import { resolveFfmpeg, clipStream } from "./lib/ffmpeg.ts";
 import { settingsBody } from "./pages/settings-page.ts";
 import { testsBody } from "./pages/tests-page.ts";
+import { runBody } from "./pages/run-page.ts";
 
 const HERE = import.meta.dir;
 const INTERFACE = join(HERE, "interface");
@@ -71,11 +72,11 @@ const serveGrainAssets = makeStatic(bunRuntime, join(GRAIN_ROOT, "assets"));
 const serveGrainFonts = makeStatic(bunRuntime, join(GRAIN_ROOT, "fonts"));
 const componentCss = createStyleBundle(bunRuntime, join(GRAIN_ROOT, "components"));
 
-// The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. Run/History/
-// Report a bug still point into the frozen old SPA (hash routes) — their own grain pages land
-// P4-P5; User guide/Plans/Catalog/Settings/Tests wear the new shell today.
+// The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. History/
+// Report a bug still point into the frozen old SPA (hash routes) — their own grain page lands
+// P5; User guide/Plans/Catalog/Settings/Tests/Run wear the new shell today.
 const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
-  { key: "run", label: "Run", href: "/", icon: "loop" },
+  { key: "run", label: "Run", href: "/run", icon: "loop" },
   { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
   { key: "history", label: "History", href: "/#history", icon: "traces" },
   { key: "bug", label: "Report a bug", href: "/#bug", icon: "send" },
@@ -278,6 +279,13 @@ async function handle(req: Request): Promise<Response> {
   // run from here. ----
   if (p === "/tests") return new Response(grainPage("Tests", testsBody(), { active: "tests" }), { headers: htmlHeaders });
   if (p === "/tests.js") return serveStatic(join(HERE, "pages", "tests.js"));
+
+  // ---- Run (P4): server-rendered grain chip-group/stat-tile/b-meter/status-list over the
+  // unchanged /api/{run,stop,stream,state,results,tests,roles,groups,creds} endpoints below —
+  // run.js (a thin client module) sends the identical /api/run body and consumes the identical
+  // /api/stream events interface/app.js does today. ----
+  if (p === "/run") return new Response(grainPage("Run", runBody(), { active: "run" }), { headers: htmlHeaders });
+  if (p === "/run.js") return serveStatic(join(HERE, "pages", "run.js"));
 
   // ---- status + run control ----
   if (p === "/api/state") return json(publicState());

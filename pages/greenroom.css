@@ -1,0 +1,52 @@
+/* pages/greenroom.css — greenroom's OWN tiny additive stylesheet (P2), served at /greenroom.css
+   and linked last in grainPage's STYLESHEETS (server.ts). Tokens only, no hardcoded colors
+   (GRAIN CONVENTIONS §4) — every value below is a var(--token) already defined in
+   node_modules/@tjakoen/grain/styles/variables.css. Kept intentionally small: everything else
+   in the shell composes from grain primitives (app-shell, side-rail, card, field, btn, badge…)
+   untouched. Success/danger stay monochrome (ink levels) — this sheet adds no hue of its own. */
+
+/* P2 ships no aside/console region (the AI door is PG, see PLAN.md) — the app-shell grid always
+   reserves a --shell-console-min floor for the console row even when no .app-shell__console
+   element is rendered (app-shell.css has no :has() guard for "console absent", unlike the aside,
+   which DOES collapse via [data-aside-hidden]). Zero the floor so an empty strip doesn't sit
+   under the status/main area. */
+.app-shell { --shell-console-min: 0rem; }
+
+/* ---- /settings layout --------------------------------------------------------------------- */
+.settings-page { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-6); }
+.settings-page .card { display: block; }
+
+.gr-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); margin-top: var(--space-4); }
+.gr-form-row .field { flex: 1 1 12rem; margin: 0; }
+
+.gr-check-row { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: center; min-height: 2.75rem; }
+.gr-check-row label { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); white-space: nowrap; }
+
+.gr-login-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-3); margin: var(--space-3) 0; }
+
+.gr-login-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--color-line); }
+.gr-login-row:first-child { border-top: 0; padding-top: 0; }
+.gr-login-row .field { flex: 1 1 8rem; margin: 0; }
+.gr-login-row .gr-env-name { flex: 0 0 6rem; font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-muted); }
+
+.gr-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
+.gr-card-meta { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-muted); }
+
+.gr-details { margin-top: var(--space-4); }
+.gr-details summary { cursor: pointer; font-size: var(--text-sm); color: var(--color-muted); }
+
+/* a quiet non-modal confirmation, shared by every grain-shelled page (grainPage renders the
+   #toast mount once) — monochrome, matches the shell's ink/paper doctrine, not a new hue. */
+.gr-toast {
+  position: fixed; left: 50%; bottom: var(--space-6); transform: translate(-50%, 0.5rem);
+  max-width: 26rem; text-align: center;
+  background: var(--ink); color: var(--paper); padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm); font-size: var(--text-sm);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 500;
+}
+.gr-toast.is-show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 768px) {
+  .settings-page { padding: var(--space-4); gap: var(--space-4); }
+}

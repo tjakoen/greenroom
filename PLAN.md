@@ -1,4 +1,223 @@
-# PLAN — Greenroom build plan
+# PLAN — Greenroom → BREAD stack migration (2026-07-09)
+
+> This is the **active** plan: greenroom's migration to a full BREAD consumer. The original
+> build plan (Tracks 1–5, complete) is archived verbatim at the bottom of this file under
+> [Archive — original build plan](#archive--original-build-plan-complete). Companion doc for
+> the new grain components this migration needs lives outside the repo (handed to a grain
+> session separately).
+
+Goal: greenroom becomes a full BREAD consumer like the portfolio — bun BATCH composition
+root, frontend rebuilt in GRAIN, MILL for its docs, PROOF for its plan board — while
+preserving every current behavior (§5).
+
+## 1. Target architecture
+
+One `server.ts` at greenroom's root, mirroring `tjakoen.github.io/server.ts`:
+
+```
+server.ts (Bun.serve, port 4321, loopback bind 127.0.0.1)
+├─ BATCH  bunRuntime · makePageServer · makeStatic · createStyleBundle
+│         createStream (SSE hub — run output; a SEPARATE stream later for the AI door)
+│         makeModuleServer (client TS → browser, no bundler)
+├─ GRAIN  styles + components + catalog + createAccepts (+ interaction layer in Phase G)
+├─ MILL   createMillRoutes → /guide (USER-GUIDE.md) + /context (context/*.md)
+├─ PROOF  createProofRoutes({ plansDir:"./plans", prefix:"/plans", chrome }) — direct mount
+└─ lib/*.ts — domain extracted from interface/server.js (mechanical port):
+   runner · recorder · envs · roles · groups · creds · tests-lib · runs · records
+   bundle · pdf · ffmpeg · zip · demo · guard
+```
+
+Decisions:
+- **Playwright stays on Node.** Server runs on bun; `runner.ts` keeps spawning
+  `npx playwright test` / `codegen` as detached node children (group-kill semantics kept).
+  In-process `chromium.launch()` (preAuth, pdf.js) is spiked in Phase 0; fallback = one-shot
+  `node scripts/*.mjs` children.
+- **Security guards port verbatim** into `guard.ts` (loopback Host allowlist, cross-origin
+  write rejection, JSON content-type gate) + unit tests. BATCH doesn't ship these.
+  Loopback bind + EADDRINUSE self-probe ("already running" vs "another app") kept.
+- **Binary serving is explicit**: `Bun.file`-based byte-preserving static for report/runs/
+  images/zips, and a Range/206 handler for `/api/video` (batch makeStatic text-reads —
+  would corrupt binaries; portfolio's font lesson).
+- **PROOF direct, pantry demoted to devDependency** (cockpit via `bunx pantry` still works;
+  `pantry.config.json` stays).
+- **Run-output SSE moves to batch `createStream`** with the same event names
+  (`state`/`line`/`started`/`done`) and replay-on-connect.
+
+## 2. Dependencies, pins, scripts
+
+Pin git deps by **sha, not #main** (bun resolution quirk: `#main` transitive deps can
+resolve duplicate layer copies). Copy the portfolio's CURRENT pattern (its package.json
+as of 2026-07-09): per-repo sha pins + a `deps:refresh` script:
+
+```json
+"deps:refresh": "for p in batch grain mill proof; do bun add @tjakoen/$p@github:tjakoen/$p#$(git ls-remote https://github.com/tjakoen/$p.git main | cut -c1-7); done"
+```
+
+Take the shas the portfolio currently pins (batch#f9ecb03, grain#3e94bdc, mill#15fa3a5,
+proof#f06daab at time of writing — re-check, or just run deps:refresh). The portfolio no
+longer carries an `overrides` block; after install run `bun pm ls` and verify exactly one
+copy of each layer resolves — if duplicates appear, add matching `overrides`.
+
+Scripts: `dev` = `bun --hot server.ts`, `start`, `demo` (GREENROOM_DEMO=1), `bootstrap`
+(`bun install && bunx playwright install chromium`), `check` (tsc --noEmit), `test`
+(playwright test, unchanged), `test:unit` (bun test). Keep `postinstall`. devDependencies:
+@playwright/test, @tjakoen/pantry, typescript, bun-types, dotenv. `.vscode/tasks.json`
+flips npm→bun.
+
+## 3. Frontend in GRAIN
+
+SPA (`interface/index.html`+`app.js`+`styles.css`, hash routes) → server-rendered pages
+under `pages/` (one real route per hash route: /run /tests /history /bug /guide /settings),
+greenroom page shell (grain styles + app-shell) injected at the composition root, small
+per-page client modules via makeModuleServer or plain JS. No bundler. Old SPA stays at `/`
+until Phase 6 cutover (hash routes don't collide with new paths).
+
+### Component mapping (current surface → GRAIN)
+
+| Surface | Realization | Owner |
+|---|---|---|
+| Sidebar/frame | app-shell + side-rail/activity-bar + nav-item | grain |
+| Status/demo badges | b-badge | grain |
+| Env picker + group presets | **chip-group** (proposed) else gr-env-picker | grain-proposed |
+| Run/Stop/light/role/scope controls | b-button, b-input, **b-select** (proposed) | grain(+proposed) |
+| Live output console | console organism + run stream | grain |
+| Live checklist | **status-list** (proposed): rows wear `data-commit="pending"` in flight, settle on result | grain-proposed |
+| Stat tiles | **stat-tile** (proposed) | grain-proposed |
+| Health bar | **b-meter** (proposed, monochrome segments) | grain-proposed |
+| Test × env matrix | table + b-badge cells | grain |
+| Tests library (filters/tags/meta/rename/dynamic-inputs) | table/card/tab/b-badge + forms | grain compose |
+| History | timeline or table | grain |
+| Bug page scrubber + moment logs | **gr-scrubber** (greenroom-owned; promote later) + figure + code-block | greenroom |
+| Bundle/PDF/clip downloads | plain `<a href>` + b-button styling | grain |
+| User guide | MILL collection over USER-GUIDE.md (deletes app.js md renderer) | mill |
+| Settings (envs/login form/roles/groups) | card + table + b-input forms; password stays `•••••• (saved)` | grain compose |
+| Onboarding hints | callout + /api/onboarding | grain |
+| Theme, ⌘K | grain theme.js/theme-boot.js/cmdk.js + /search.json | grain, free |
+| Plan board | PROOF /plans | proof |
+
+Greenroom components live in a `components/` root fed to createStyleBundle/createCatalog
+alongside grain's (they appear in /catalog). Tokens-only, one root class, variants as
+attributes (CONVENTIONS §4). If the grain proposals land first, greenroom builds fewer
+gr-* components — check grain's catalog before building any.
+
+### The AI door (Phase G, last)
+
+createAccepts → /ai/manifest; createInteractionLayer + greenroom reasoner; data-surface on
+operable surfaces; ai-dispatch.js in shell; boot drift guards copied from portfolio.
+Constraint: grain's `ActionName` is a CLOSED union — greenroom domain verbs (run.start etc.)
+don't exist and don't belong upstream. So: human path stays hypermedia POSTs to /api/*
+(stack-conformant); AI operability starts with existing verbs (`demo.run` on `screen` → a
+scripted "watch the AI run the examples" demo + spotlight/console narration; `desk.stop`).
+Real domain verbs = a flagged cross-repo decision (grow grain's registry reluctantly, or a
+consumer-extensible registry in grain). Door gets its OWN SSE stream, never the run stream.
+
+## 4. Phases (each independently verifiable)
+
+- **P0 — spikes, no product change.** Baseline drive of the old app (run, record, bundle).
+  Spikes under bun: (a) `bun interface/server.js` runs the whole app as-is; (b)
+  `chromium.launch()` + `spawn('npx',…,{detached})` + group kill; (c) codegen spawn.
+  If (a) passes → ship `"start": "bun interface/server.js"` immediately (runtime pivot
+  lands before any rewrite). Verify: notes per spike; go/no-go on in-process chromium.
+  **STATUS (2026-07-09): DONE.** (a) PASS — full app boots under bun, /api/state·/api/envs·
+  /api/tests·/ all serve, zero warnings. (b1) GO — in-process `chromium.launch()` works
+  under bun (no node one-shot fallback needed for preAuth/pdf). (b2) detached spawn +
+  `kill(-pid)` group kill reaps parent+grandchild; `npx playwright` (v1.61.1) spawns from
+  bun. (c) GO — codegen spawns its browser tree under bun, group-kill reaps it clean.
+  `start`+`demo` flipped to `bun interface/server.js`, `bun run start` verified.
+- **P1 — composition root serving the EXISTING frontend.** Pinned deps; server.ts; guards;
+  all /api/* handlers ported to lib/*.ts; run stream on createStream; binary/Range helpers;
+  PROOF /plans + MILL /guide + /context (minimal chrome). interface/server.js kept until P6.
+  Verify: `bun run check`; boot; curl /api/state /api/envs /api/tests /api/runs /plans
+  /guide; full run + recording + bundle via old UI on new server; `bun test` on lib units;
+  `bun pm ls` single-copy check.
+  **STATUS (2026-07-09): DONE + VERIFIED.** server.js (1975 lines) → 15 lib/*.ts modules
+  (paths·run-stream foundation + envs·creds·roles·groups·tests-lib·records·runner·recorder·
+  bundle·zip·pdf·ffmpeg, joining guard·binary). server.ts wires guard → PROOF/MILL → old SPA
+  at `/` → all /api/* → binary static (/report,/runs,pdf-image) → EADDRINUSE probe + 500 wrap.
+  `start`+`demo` flipped to `bun server.ts`; old entry kept as `start:legacy`. Verified: check
+  + check:legacy green, `bun test lib` 14/14, `bun pm ls` single-copy, curl battery all 200 +
+  CSRF 403, a full run (example-search→passed→archived, /report) + PDF + moment + bug-bundle
+  zip + recorder spawn→stop group-kill (no orphans/stray spec), demo write-guard. NOTE: run
+  SSE is a greenroom-owned Bun ReadableStream hub (lib/run-stream.ts) with replay-on-connect,
+  NOT batch createStream — the pinned batch Stream has no replay-on-subscribe hook and P1
+  serves the frozen app.js (§5.1). ALL WORK UNCOMMITTED on bread-migration (commit when asked).
+- **P2 — GRAIN shell + Guide + Settings.** Shell/theme/⌘K/catalog; Guide via MILL; Settings
+  forms. Verify: curl /settings /guide /catalog /components.css; env/role/group edits
+  byte-match old file formats; dark mode; demo mode blocks writes.
+- **P3 — Tests page.** Library, filters, tags/meta, rename/delete, dynamic inputs, record
+  launcher. Verify: tag/group/rename/record/dynamic-input end-to-end vs P0 baseline.
+- **P4 — Run page.** Picker, scope, role, light, Run/Stop, console SSE, checklist
+  (pending→settled rows), stat tiles, health bar, matrix. Verify: single+multi-env live
+  runs; Stop kills workers; checklist reconciles from /api/results.
+- **P5 — History + Report-a-bug.** Runs list; scrubber + moment logs + PDF + clip + bundle
+  + video seeking. Verify: PDF window == preview window; clip hides without ffmpeg; bundle
+  zip diffed vs P0 bundle.
+- **P6 — cutover.** `/` = new Run page; delete interface/ SPA + server.js; demo parity
+  drive; tasks/README/USER-GUIDE/CLAUDE sync table/AUDIT updated; run the full §5 checklist;
+  fresh-clone sim (`rm -rf node_modules && bun run bootstrap && bun start`) + `bun run demo`.
+- **PG — AI door** (after cutover). Verify: /ai/manifest lists surfaces; demo runs AND
+  releases the spotlight on natural completion (grain lesson 7); no drift warnings at boot.
+
+## 5. Must-not-regress checklist (the P6 gate)
+
+1. Runs: single/multi-env (`TEST_ENVS`, project name `chromium (<env>)` is load-bearing),
+   by file/tag/group, GR_ROLE, CAPTURE=light, Stop kills process tree, SSE replay.
+2. Config byte-compat: urls.json (_login + per-env login, default:true, first-boot seed),
+   roles.json (+ .env-scan seed), groups.json, .env formats + control-char rejection;
+   passwords never returned.
+3. Artifacts: capture per playwright.config.ts (untouched); runs/ naming + count/size
+   pruning; stale-report guard; /report + /runs serving w/ traversal guards; results.json
+   flattening; flaky/never-run/slowest history.
+4. Bug page: scrubber, timed+untimed moment logs, PDF scoped to same from/to, video
+   Range/206, ffmpeg clip w/ graceful absence, bundle entry set identical.
+5. Recorder: preAuth → --load-storage, cancel-during-preauth, temp cleanup, spec
+   post-processing (storageState strip, URL relativize, login() injection, role meta),
+   dynamic-input rewriting.
+6. Tests mgmt: title/@tag parsing, tag rewrite + meta-key migration, rename/delete +
+   sidecar migration.
+7. Demo mode: all read boundaries → demo/, all writes refused, badge, VS Code task.
+8. Local-only security: loopback bind, Host allowlist, cross-origin write rejection, JSON
+   content-type gate, EADDRINUSE self-probe.
+9. Non-coder entry: VS Code tasks no-typing; port 4321; malformed urls.json degrades with
+   hint; per-request error wrapping (one error never kills the server).
+10. Guide renders in-app; onboarding hints appear.
+
+## 6. Risks
+
+| Risk | De-risk |
+|---|---|
+| Playwright under bun | Runner always a node child; P0 spikes; preAuth/pdf fall back to node one-shot scripts |
+| Recorder flow | Spiked P0, ported unchanged P1 (runtime vs UI changes never conflated) |
+| Login flows | fixtures/auth.ts/environments.ts untouched (run inside node runner); test vs shipped `example` role |
+| Binary/Range regressions | dedicated Bun.file helpers + unit tests (206 math, traversal) + bytes check in P1 curls |
+| Guard regression | guard.ts verbatim + unit tests from P1 |
+| SSE worlds colliding | separate streams (portfolio precedent); door deferred to PG |
+| Duplicate layer copies | sha pins; `bun pm ls` check; add overrides only if duplicates appear |
+| UI long tail (~4k-line SPA) | old SPA runnable until P6; per-page migration diffs against it; §5 is the gate |
+
+## 7. Dependency direction + standards
+
+Greenroom imports @tjakoen/{batch,grain,mill,proof}; is a dep of NOTHING. Reusable
+discoveries are proposed upward to grain (see companion proposals doc), never reached into.
+CLAUDE.md keeps referencing the published standards index (now the @tjakoen/standards
+package / https://tjakoen.github.io/standards); update its sync table as interface rows
+change (server.js↔index.html↔app.js↔styles.css → server.ts↔pages/↔components/↔lib/).
+Add AGENTS.md → CLAUDE.md symlink + README badge row per README-STANDARD if missing.
+Greenroom's own non-negotiables (no app-under-test source, no secrets/URLs committed,
+tests flat, user-first) all survive; "dependencies at the floor" = the stack + zero
+third-party runtime deps beyond it.
+
+---
+
+# Archive — original build plan (complete)
+
+> The plan below drove greenroom's original build (Tracks 1–5: roles↔environments,
+> multi-env runs, open-source demo + features page, dynamic test data, dashboard layout).
+> All tracks landed and were verified; it is preserved here for the behavior contract it
+> encodes (§5 of the migration plan above is the must-not-regress gate derived from it).
+> Kept verbatim.
+
+## PLAN — Greenroom build plan
 
 > **Progress (2026-07-08):** DONE + verified — shared refactor (env-aware `getUser`,
 > `envName` option, `login` fixture); Track 1a (roles.json + `/api/roles` + Roles & logins

@@ -24,6 +24,13 @@ GRAIN-PLAN.md
 # Dependencies
 node_modules/
 
+# Intentionally lockless: bun can't resolve greenroom's depth-2+ nested github
+# git-dep graph (greenroom -> pantry -> 4 layers) from scratch, so a committed
+# lock only goes stale/inconsistent and can't be regenerated (see package.json
+# "//dependencies" note + the bread-bun-nested-git blocker). Existing checkouts
+# run from node_modules/; do NOT try to regenerate a lock.
+bun.lock
+
 # Playwright output. Anchored to the repo root (leading /) so these DON'T also
 # match the committed demo/ fixtures (demo/test-results, demo/runs, …).
 /test-results/

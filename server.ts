@@ -1,17 +1,26 @@
 // greenroom/server.ts — the BREAD composition root: the ONE place BATCH + GRAIN + MILL + PROOF
 // and greenroom's own domain meet, mirroring tjakoen.github.io/server.ts.
 //
-// STATUS: Phase 1 (PLAN.md §4, P1) — composition root serving the EXISTING interface/ SPA. The
-// whole domain of interface/server.js is ported into lib/*.ts and wired here: every /api/* route,
-// the run-output SSE (lib/run-stream.ts), byte-preserving binary/Range static for report/runs/
-// images/zips (lib/binary.ts), the local-only security guards (lib/guard.ts), PROOF /plans and
-// MILL /guide,/context. The old interface/server.js is kept as the live app until cutover (P6);
-// `start` flips to this file at the end of P1 verification. Frontend rebuild in GRAIN is P2–P5.
-import { join, basename } from "node:path";
+// STATUS: Phase 2 (PLAN.md §4, P2) — GRAIN shell + Guide + Settings. P1 ported the whole domain
+// of interface/server.js into lib/*.ts and wired every /api/* route, the run-output SSE
+// (lib/run-stream.ts), byte-preserving binary/Range static for report/runs/images/zips
+// (lib/binary.ts), the local-only security guards (lib/guard.ts), PROOF /plans and MILL
+// /guide,/context (both with a placeholder chrome). P2 replaces that placeholder with a real
+// GRAIN app-shell page (grainPage below), serves GRAIN's styles/scripts/component-CSS/catalog,
+// and adds /settings — server-rendered grain forms over the UNCHANGED /api/{envs,roles,creds,
+// groups} endpoints. The old interface/ SPA at "/" (and its hash routes) is kept byte-identical
+// until cutover (P6). Frontend rebuild in GRAIN continues P3–P5 (Tests/Run/History pages).
+import { join, basename, dirname } from "node:path";
 import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { bunRuntime } from "@tjakoen/batch/platform/bun-runtime.ts";
+import { makeStatic } from "@tjakoen/batch/http/static.ts";
+import { createStyleBundle } from "@tjakoen/batch/assets/style-bundle.ts";
 import { createMillRoutes, dirSource } from "@tjakoen/mill/serve.ts";
 import type { ContentSource } from "@tjakoen/mill/serve.ts";
+import { escapeHtml } from "@tjakoen/mill/core/engine.ts";
 import { createProofRoutes } from "@tjakoen/proof/routes.ts";
+import { createCatalog } from "@tjakoen/grain/catalog/catalog.ts";
 
 import { guardRequest } from "./lib/guard.ts";
 import { serveFileRanged, safeResolve, mimeOf } from "./lib/binary.ts";
@@ -33,6 +42,7 @@ import { startRecording } from "./lib/recorder.ts";
 import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
 import { buildPdf } from "./lib/pdf.ts";
 import { resolveFfmpeg, clipStream } from "./lib/ffmpeg.ts";
+import { settingsBody } from "./pages/settings-page.ts";
 
 const HERE = import.meta.dir;
 const INTERFACE = join(HERE, "interface");
@@ -41,20 +51,117 @@ const RUNS_DIR = existsSync(join(ROOT, "demo", "runs")) && Bun.env.GREENROOM_DEM
   ? join(ROOT, "demo", "runs")
   : join(ROOT, "runs");
 
-// Minimal P1 page chrome for the NEW human routes (PROOF/MILL) — a bare valid document. The GRAIN
-// app shell wraps these in P2; kept plain here so the mounts verify in isolation. The old SPA at
-// "/" is served as-is from interface/index.html.
-function minimalPage(title: string, body: string): string {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">` +
-    `<meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title></head>` +
-    `<body>${body}</body></html>`;
+// ---------------------------------------------------------------- GRAIN shell (P2)
+// GRAIN is installed as a git dependency (node_modules/@tjakoen/grain), never a monorepo sibling
+// — unlike pantry.ts (which still lives beside grain/ and can use a relative sibling path), so the
+// root must resolve as a PACKAGE. grain's package.json exports "./styles/*" but not
+// "./package.json" itself, so anchor on a real exported file (styles/variables.css) and walk up
+// two dirs (file → styles/ → grain root) rather than the (unexported) package.json shortcut.
+const GRAIN_ROOT = dirname(dirname(fileURLToPath(import.meta.resolve("@tjakoen/grain/styles/variables.css"))));
+
+const serveGrainStyles = makeStatic(bunRuntime, join(GRAIN_ROOT, "styles"));
+const serveGrainScripts = makeStatic(bunRuntime, join(GRAIN_ROOT, "scripts"));
+const serveGrainAssets = makeStatic(bunRuntime, join(GRAIN_ROOT, "assets"));
+// grain.css @font-face's the Redaction faces at absolute /fonts/* URLs — serve grain's own
+// fonts/ so the shell renders in GRAIN's typeface instead of silently falling back to system
+// fonts (pantry omits this and falls back; greenroom serves them).
+const serveGrainFonts = makeStatic(bunRuntime, join(GRAIN_ROOT, "fonts"));
+const componentCss = createStyleBundle(bunRuntime, join(GRAIN_ROOT, "components"));
+
+// The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. Run/Tests/
+// History/Report a bug still point into the frozen old SPA (hash routes) — their own grain pages
+// land P3–P5; User guide/Plans/Catalog/Settings wear the new shell today.
+const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
+  { key: "run", label: "Run", href: "/", icon: "loop" },
+  { key: "tests", label: "Tests", href: "/#tests", icon: "tasks" },
+  { key: "history", label: "History", href: "/#history", icon: "traces" },
+  { key: "bug", label: "Report a bug", href: "/#bug", icon: "send" },
+  { key: "guide", label: "User guide", href: "/guide", icon: "knowledge" },
+  { key: "plans", label: "Plans", href: "/plans", icon: "files" },
+  { key: "catalog", label: "Catalog", href: "/catalog", icon: "spark" },
+  { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true },
+];
+// Only the real, single-page destinations belong in the catalog's page-nav / a component search
+// index (hash routes into the frozen SPA aren't pages of THIS shell yet).
+const SHELL_PAGE_HREFS = NAV.filter((n) => !n.href.includes("#")).map((n) => n.href);
+
+const STYLESHEETS = [
+  "/styles/variables.css", "/styles/global.css", "/styles/grain.css", "/styles/cmdk.css",
+  "/components.css", "/greenroom.css",
+];
+const styleLinks = STYLESHEETS.map((h) => `<link rel="stylesheet" href="${h}">`).join("\n  ");
+
+// The catalog builds its OWN shell (it isn't mounted inside grainPage) — give it the same
+// stylesheet links so its component previews are styled (pantry.ts does the same).
+const catalog = createCatalog(join(GRAIN_ROOT, "components"), () => SHELL_PAGE_HREFS, { headEnd: styleLinks });
+
+function icon(sym: string, size?: "sm" | "lg"): string {
+  return `<svg class="icon"${size ? ` data-size="${size}"` : ""} aria-hidden="true" focusable="false">` +
+    `<use href="/assets/sprite.svg#${sym}"></use></svg>`;
+}
+
+function railNav(active?: string): string {
+  const item = (n: (typeof NAV)[number]): string => {
+    const current = n.key === active ? ` aria-current="page"` : "";
+    return `<a class="nav-item" href="${escapeHtml(n.href)}"${current}>${icon(n.icon)}` +
+      `<span class="nav-item__label">${escapeHtml(n.label)}</span></a>`;
+  };
+  const main = NAV.filter((n) => !n.footer).map(item).join("\n    ");
+  const footer = NAV.filter((n) => n.footer).map(item).join("\n    ");
+  return `${main}\n    <div class="side-rail__spacer"></div>\n    ${footer}`;
+}
+
+// The GRAIN app-shell page wrapper — replaces P1's minimalPage for every new human route
+// (PROOF /plans, MILL /guide + /context, and /settings). The old SPA at "/" is untouched (it
+// ships its own <head>/chrome from interface/index.html, never this function).
+//   - theme-boot.js is render-blocking in <head>, BEFORE the stylesheets (no FOUC — mirrors
+//     saved data-color-scheme/data-theme onto <html> before first paint).
+//   - the title bar's `.window-bar__search` is the ⌘K anchor cmdk.js measures + opens from.
+//   - shell.js (rail collapse/drawer) + theme.js (toggle wiring) + cmdk.js load deferred after
+//     the body, same order pantry.ts uses.
+//   - data-aside-hidden="true": P2 ships no assistant pane (the AI door is PG) — collapses the
+//     app-shell's reserved aside column to 0 instead of leaving a dead 20rem gap on the right.
+function grainPage(title: string, body: string, opts: { active?: string } = {}): string {
+  const active = opts.active;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)} · Greenroom</title>
+  <script src="/scripts/theme-boot.js"></script>
+  ${styleLinks}
+</head>
+<body class="app-window-backdrop">
+  <div class="app-shell app-window" data-aside-hidden="true">
+    <header class="app-shell__window window-bar">
+      <span class="window-bar__dots"><i></i><i></i><i></i></span>
+      <span class="window-bar__ctl">
+        <button type="button" class="icon-btn" data-variant="ghost" data-cycle-theme title="Cycle theme" aria-label="Cycle theme">◆</button>
+        <button type="button" class="icon-btn" data-variant="ghost" data-toggle-scheme title="Light / dark" aria-label="Light / dark">◐</button>
+      </span>
+      <button class="window-bar__search" type="button" data-cmdk-open><kbd class="kbd">⌘K</kbd> greenroom › ${escapeHtml(title)}</button>
+      <span class="window-bar__end" style="width:6.5rem"></span>
+    </header>
+    <aside class="app-shell__rail side-rail">
+      <div class="side-rail__brand">${icon("spark")}<span>Greenroom</span></div>
+      ${railNav(active)}
+    </aside>
+    <main class="app-shell__main">${body}</main>
+  </div>
+  <div id="toast" class="gr-toast" role="status" aria-live="polite"></div>
+  <script src="/scripts/shell.js" defer></script>
+  <script src="/scripts/theme.js" defer></script>
+  <script src="/scripts/cmdk.js" defer></script>
+</body>
+</html>`;
 }
 
 // --- PROOF: greenroom renders its OWN plans/ folder as a board at /plans. ---
 const proofRoutes = createProofRoutes({
   plansDir: join(HERE, "plans"),
   prefix: "/plans",
-  chrome: (title, body) => minimalPage(`${title} · Plans`, `<div class="board">${body}</div>`),
+  chrome: (title, body) => grainPage(`${title} · Plans`, `<div class="board">${body}</div>`, { active: "plans" }),
 });
 
 // --- MILL: user guide (USER-GUIDE.md) at /guide, app-under-test context docs at /context. ---
@@ -62,11 +169,22 @@ const guideSource: ContentSource = {
   list: async () => ["user-guide"],
   read: async (slug) => (slug === "user-guide" ? await Bun.file(join(HERE, "USER-GUIDE.md")).text() : null),
 };
+// USER-GUIDE.md (and each context doc) leads with its OWN `# Title` heading, so MILL's default
+// note masthead would re-emit the same title under our chrome and double it. Render the body
+// only (same fix pantry.ts uses); the grade guardrail still runs (data-grade="smooth").
+const bodyOnlyLayout = ({ body }: { body: string }) => `<article class="note" data-grade="smooth">${body}</article>`;
 const millRoutes = createMillRoutes({
-  chrome: ({ title, body }) => minimalPage(title, body),
   collections: [
-    { prefix: "/guide", title: "User guide", source: guideSource },
-    { prefix: "/context", title: "App-under-test context", source: dirSource(join(HERE, "context")) },
+    {
+      prefix: "/guide", title: "User guide", source: guideSource,
+      adapter: { defaultLayout: bodyOnlyLayout },
+      chrome: ({ title, body }) => grainPage(title, `<div class="board">${body}</div>`, { active: "guide" }),
+    },
+    {
+      prefix: "/context", title: "App-under-test context", source: dirSource(join(HERE, "context")),
+      adapter: { defaultLayout: bodyOnlyLayout },
+      chrome: ({ title, body }) => grainPage(title, `<div class="board">${body}</div>`),
+    },
   ],
 });
 
@@ -128,6 +246,27 @@ async function handle(req: Request): Promise<Response> {
   // ---- the old SPA + its assets (frozen in P1; GRAIN pages replace them P2-P6) ----
   if (p === "/" || p === "/index.html") return serveStatic(join(INTERFACE, "index.html"));
   if (p === "/app.js" || p === "/styles.css") return serveStatic(join(INTERFACE, p.slice(1)));
+
+  // ---- GRAIN shell assets (P2): styles/scripts/component-CSS/icon sprite + the catalog ----
+  const htmlHeaders = { "Content-Type": "text/html; charset=utf-8" };
+  if (p.startsWith("/styles/")) return serveGrainStyles(p.slice("/styles".length));
+  if (p.startsWith("/scripts/")) return serveGrainScripts(p.slice("/scripts".length));
+  if (p.startsWith("/assets/")) return serveGrainAssets(p.slice("/assets".length));
+  if (p.startsWith("/fonts/")) return serveGrainFonts(p.slice("/fonts".length));
+  if (p === "/favicon.ico") return new Response(null, { status: 204 });
+  if (p === "/components.css") return new Response(await componentCss.css(), { headers: { "Content-Type": "text/css" } });
+  if (p === "/greenroom.css") return serveStatic(join(HERE, "pages", "greenroom.css"));
+  if (p === "/catalog") return new Response(await catalog.html(), { headers: htmlHeaders });
+  if (p === "/search.json") {
+    const pages = NAV.map((n) => ({ title: n.label, url: n.href }));
+    const components = (await catalog.entries()).map((c) => ({ title: c.name, subtitle: c.layer, url: `/catalog#${c.slug}` }));
+    return json({ pages, components });
+  }
+
+  // ---- Settings (P2): server-rendered grain forms over the unchanged /api/{envs,roles,creds,
+  // groups} endpoints below — settings.js (a thin client module) does the fetch + re-render. ----
+  if (p === "/settings") return new Response(grainPage("Settings", settingsBody(), { active: "settings" }), { headers: htmlHeaders });
+  if (p === "/settings.js") return serveStatic(join(HERE, "pages", "settings.js"));
 
   // ---- status + run control ----
   if (p === "/api/state") return json(publicState());

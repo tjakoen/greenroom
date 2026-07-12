@@ -93,6 +93,19 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 
 ## Keep it aligned — when you change X, update Y
 
+> **Migration note (BREAD, in progress — PLAN.md §4).** The entry point is **`server.ts`**, the
+> BATCH·GRAIN·MILL·PROOF composition root (`start` = `bun server.ts`; `start:legacy` = the old
+> `interface/server.js`). The whole domain lives in **`lib/*.ts`**; the `interface/server.js`
+> rows below describe the **frozen old SPA still served at `/`** (Run/Tests/History/Report-a-bug),
+> unchanged until the P6 cutover. Already migrated to real GRAIN-shelled routes (via `grainPage`
+> in `server.ts`): **`/settings`** (`pages/settings-page.ts` + `pages/settings.js`, forms over the
+> unchanged `/api/*`), **`/guide`** + **`/context`** (MILL), **`/plans`** (PROOF), **`/catalog`**
+> (grain). Shell assets (`/styles`,`/scripts`,`/assets`,`/fonts`,`/components.css`) are served from
+> the grain package; the shell chrome + nav live in `server.ts` `grainPage`/`NAV`, page-specific
+> layout in `pages/greenroom.css`. When you touch a migrated page, update `server.ts` + its
+> `pages/*` file (not the `interface/` SPA); when you touch a not-yet-migrated page, the
+> `interface/` rows below still apply.
+
 | You change… | …also update |
 |---|---|
 | **An environment** (add/edit/remove) | Just use the app's **Environments** panel (writes `config/urls.json`, seeds `.env.example`). Envs are dynamic — `config/environments.ts` reads `urls.json` at runtime; the runner targets `tests/` regardless of env, so no `EnvName` type or `package.json` script edit is needed. Mark exactly one `"default": true`. Add real logins in Settings → **Roles & logins**; set how the app's login form works in the same panel's **Login form** section (per env or shared). |

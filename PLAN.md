@@ -183,6 +183,28 @@ consumer-extensible registry in grain). Door gets its OWN SSE stream, never the 
 - **P4 — Run page.** Picker, scope, role, light, Run/Stop, console SSE, checklist
   (pending→settled rows), stat tiles, health bar, matrix. Verify: single+multi-env live
   runs; Stop kills workers; checklist reconciles from /api/results.
+  **STATUS (2026-07-13): DONE + VERIFIED.** New **`/run`** page (`pages/run-page.ts` skeleton +
+  `pages/run.js` thin client) rebuilds the old SPA Run surface on GRAIN over the UNCHANGED
+  `/api/{run,stop,stream,state,results,tests,roles,groups,creds}` — `run.js` sends the identical
+  `/api/run` body and consumes the identical `/api/stream` events (`state`/`line`/`started`/`done`,
+  replay-on-connect) `interface/app.js` does (byte-compat gate). Uses **three new grain primitives**
+  (built in grain `996282f`, vendored into node_modules like the P3 components): **stat-tile**
+  (Passed/Failed/Pending/Total), **b-meter** (`--seg`-driven health bar), **status-list** (single-env
+  live checklist — a running row wears `data-commit="pending"`, the grain control lifecycle). Multi-env
+  stays a plain grain `.table` matrix (table + b-badge cells, no bespoke component). chip-group
+  multi-select env picker (monochrome ●/○ login-readiness glyph — no hue), b-select Tests-scope +
+  Run-as pickers, monochrome `#runStatus` readout (grain caret while running). **Run seam owned:** the
+  Tests page (P3) now hands off to `/run` (was `/#run`); the Run page itself triggers runs. Report-a-bug
+  on a failed row hands off to the frozen SPA (`/#bug`) until P5. NAV Run `/` → `/run`; old SPA at `/`
+  byte-identical. Also defined grain's `.cat-intro` in greenroom.css (was unstyled on the app-shell
+  pages — a latent P3 gap). Verified: `check` + `check:legacy` green, `bun test lib` 14/14 (untouched),
+  and headless-chromium drives in NON-demo mode — a real `@smoke` run (button → `startRun` →
+  `seedChecklist` → SSE `started`/`line`/`done` → status-list + stat tiles + b-meter render →
+  `reconcileResults` fills the real duration), a 2-env `demo+demo2` run (matrix table + per-env health),
+  and **Stop** (`Stopping…` → `Stopped`, buttons revert). **ZERO console errors** throughout.
+  **Deferred to a follow-up:** stashing the picked scope from Tests → Run (the handoff lands on `/run`
+  but the user re-picks scope there; nothing reads a stashed scope yet), and the Run-page onboarding
+  card (`refreshOnboarding`) was not ported (cross-cutting; not in P4's surface).
 - **P5 — History + Report-a-bug.** Runs list; scrubber + moment logs + PDF + clip + bundle
   + video seeking. Verify: PDF window == preview window; clip hides without ffmpeg; bundle
   zip diffed vs P0 bundle.

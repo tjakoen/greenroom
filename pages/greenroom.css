@@ -12,6 +12,12 @@
    under the status/main area. */
 .app-shell { --shell-console-min: 0rem; }
 
+/* `.cat-intro` is grain's catalog intro/hint-paragraph class; the catalog defines it in its OWN
+   scoped <style>, so on these app-shell pages — which reuse it for form hints + empty-state copy
+   (settings/tests/run) — it would otherwise be unstyled default text. Give it grain's own muted,
+   monochrome treatment. Margin 0: the surrounding cards/gr-form-rows own the spacing. */
+.cat-intro { color: var(--color-muted); margin: 0; }
+
 /* ---- /settings layout --------------------------------------------------------------------- */
 .settings-page { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-6); }
 .settings-page .card { display: block; }
@@ -106,4 +112,43 @@
 @media (max-width: 768px) {
   .tests-page { padding: var(--space-4); gap: var(--space-4); }
   .gr-row-actions { opacity: 1; } /* narrow screens: no reliable hover either */
+}
+
+/* ---- /run layout (P4) -----------------------------------------------------------------------
+   Reuses .settings-page/.tests-page's column/gap rhythm + gr-form-row/section-head above; the
+   classes below are unique to the Run page's env chip-group + saved-group action row, the
+   monochrome status readout, and the live dashboard (stat-tile row, b-meter cap/env-health
+   lines, and the status-list/matrix mount). Everything here is MONOCHROME — the statusMark
+   glyphs (✓ ✕ ◐ ○) and the env-picker's filled/hollow glyph carry every signal; no hue. */
+.run-page { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-6); }
+.run-page .card { display: block; }
+
+/* saved site-group one-click presets are ACTIONS, not a form control — plain buttons with
+   aria-pressed for "matches current selection", not a chip-group. Hidden (via [hidden]) when no
+   saved group has any usable site. */
+.gr-group-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+
+.gr-check-inline { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); white-space: nowrap; }
+
+/* the monochrome run-status readout — text only, no hue'd pill/dot. While running it wears
+   data-commit="pending" (the shared grain control-lifecycle idiom) for a dashed leading edge
+   instead of a bespoke "running" treatment. */
+.gr-run-status { font-size: var(--text-sm); padding: var(--space-1) var(--space-2); }
+.gr-run-status[data-commit="pending"] { border-left: 2px dashed var(--ink); padding-left: calc(var(--space-2) - 2px); }
+
+.gr-stat-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.gr-stat-row .stat { flex: 1 1 8rem; }
+
+#healthBar { margin-top: var(--space-4); }
+.gr-health-cap { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-muted); margin-top: var(--space-2); }
+.gr-env-health { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); font-size: var(--text-sm); color: var(--color-muted); }
+.gr-eh-name { font-family: var(--font-mono); }
+
+.gr-output { max-height: 24rem; overflow: auto; font-size: var(--text-xs); }
+
+/* multi-env matrix: a plain grain table (rows = tests, cols = envs); no bespoke component. */
+#checklist td { vertical-align: middle; }
+
+@media (max-width: 768px) {
+  .run-page { padding: var(--space-4); gap: var(--space-4); }
 }

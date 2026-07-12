@@ -8,8 +8,10 @@
 // /guide,/context (both with a placeholder chrome). P2 replaces that placeholder with a real
 // GRAIN app-shell page (grainPage below), serves GRAIN's styles/scripts/component-CSS/catalog,
 // and adds /settings — server-rendered grain forms over the UNCHANGED /api/{envs,roles,creds,
-// groups} endpoints. The old interface/ SPA at "/" (and its hash routes) is kept byte-identical
-// until cutover (P6). Frontend rebuild in GRAIN continues P3–P5 (Tests/Run/History pages).
+// groups} endpoints. P3 adds /tests the same way, over the unchanged tests-lib.ts endpoints,
+// using the new grain chip-group + b-select components. The old interface/ SPA at "/" (and its
+// hash routes) is kept byte-identical until cutover (P6). Frontend rebuild in GRAIN continues
+// P4–P5 (Run/History pages).
 import { join, basename, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -43,6 +45,7 @@ import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
 import { buildPdf } from "./lib/pdf.ts";
 import { resolveFfmpeg, clipStream } from "./lib/ffmpeg.ts";
 import { settingsBody } from "./pages/settings-page.ts";
+import { testsBody } from "./pages/tests-page.ts";
 
 const HERE = import.meta.dir;
 const INTERFACE = join(HERE, "interface");
@@ -68,12 +71,12 @@ const serveGrainAssets = makeStatic(bunRuntime, join(GRAIN_ROOT, "assets"));
 const serveGrainFonts = makeStatic(bunRuntime, join(GRAIN_ROOT, "fonts"));
 const componentCss = createStyleBundle(bunRuntime, join(GRAIN_ROOT, "components"));
 
-// The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. Run/Tests/
-// History/Report a bug still point into the frozen old SPA (hash routes) — their own grain pages
-// land P3–P5; User guide/Plans/Catalog/Settings wear the new shell today.
+// The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. Run/History/
+// Report a bug still point into the frozen old SPA (hash routes) — their own grain pages land
+// P4-P5; User guide/Plans/Catalog/Settings/Tests wear the new shell today.
 const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
   { key: "run", label: "Run", href: "/", icon: "loop" },
-  { key: "tests", label: "Tests", href: "/#tests", icon: "tasks" },
+  { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
   { key: "history", label: "History", href: "/#history", icon: "traces" },
   { key: "bug", label: "Report a bug", href: "/#bug", icon: "send" },
   { key: "guide", label: "User guide", href: "/guide", icon: "knowledge" },
@@ -267,6 +270,14 @@ async function handle(req: Request): Promise<Response> {
   // groups} endpoints below — settings.js (a thin client module) does the fetch + re-render. ----
   if (p === "/settings") return new Response(grainPage("Settings", settingsBody(), { active: "settings" }), { headers: htmlHeaders });
   if (p === "/settings.js") return serveStatic(join(HERE, "pages", "settings.js"));
+
+  // ---- Tests (P3): server-rendered grain chip-group/b-select over the unchanged /api/{tests,
+  // recorded-inputs,apply-inputs,test-tags,test-meta,tests/rename,roles,record,state} endpoints
+  // below — tests.js (a thin client module) does the fetch + re-render. Run/Run selected/Run by
+  // tag hand off to the frozen SPA's Run page (still P4's to migrate) rather than triggering a
+  // run from here. ----
+  if (p === "/tests") return new Response(grainPage("Tests", testsBody(), { active: "tests" }), { headers: htmlHeaders });
+  if (p === "/tests.js") return serveStatic(join(HERE, "pages", "tests.js"));
 
   // ---- status + run control ----
   if (p === "/api/state") return json(publicState());

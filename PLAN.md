@@ -144,6 +144,24 @@ consumer-extensible registry in grain). Door gets its OWN SSE stream, never the 
 - **P2 — GRAIN shell + Guide + Settings.** Shell/theme/⌘K/catalog; Guide via MILL; Settings
   forms. Verify: curl /settings /guide /catalog /components.css; env/role/group edits
   byte-match old file formats; dark mode; demo mode blocks writes.
+  **STATUS (2026-07-12): DONE + VERIFIED.** `server.ts` gained a real GRAIN `app-shell` page
+  (`grainPage`) that replaces P1's `minimalPage` for every new human route — a side-rail nav +
+  app-window title bar, render-blocking `theme-boot.js` (no FOUC), `theme.js`, `cmdk.js` (⌘K
+  over `/search.json`), `shell.js`. Serves grain assets via BATCH `makeStatic`/`createStyleBundle`:
+  `/styles/*`, `/scripts/*`, `/assets/*`, **`/fonts/*`** (Redaction faces — pantry omits these
+  and falls back; greenroom serves them), `/components.css`, `/catalog` (grain `createCatalog`,
+  33 components). PROOF `/plans` + MILL `/guide`,`/context` now take `grainPage` as their `chrome`
+  (guide/context use pantry's `bodyOnlyLayout` adapter so the doc's own `# H1` isn't doubled by
+  MILL's masthead). New **`/settings`** page (`pages/settings-page.ts` skeleton + `pages/settings.js`
+  client + `pages/greenroom.css`) reproduces Environments / Roles & logins / Site groups as grain
+  `.card`/`.field`/`.btn` forms POSTing the IDENTICAL bodies to the UNCHANGED
+  `/api/{envs,roles,creds,groups}` — password never returned (`•••••• (saved)`), demo writes
+  refused + surfaced. NO proposed grain components needed (Settings has no `<select>` except the
+  native group role picker). Old SPA at `/` byte-identical. Verified: `check` + `check:legacy`
+  green, `bun test lib` 14/14, curl battery (all new routes 200 + correct types), CSRF 403,
+  live env/role/group write round-trip (correct file format) + restore, demo write-block
+  (`{ok:false,demo:true}`), and a headless-chromium drive of /settings /guide /catalog /plans:
+  shell renders, settings list populates from `/api/*`, ⌘K opens, **zero console errors**.
 - **P3 — Tests page.** Library, filters, tags/meta, rename/delete, dynamic inputs, record
   launcher. Verify: tag/group/rename/record/dynamic-input end-to-end vs P0 baseline.
 - **P4 — Run page.** Picker, scope, role, light, Run/Stop, console SSE, checklist

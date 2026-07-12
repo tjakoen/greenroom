@@ -294,15 +294,12 @@
   }
 
   // ------------------------------------------------------------------------------ Run handoff
-  // The Run page is still the frozen SPA (P4 migrates it) — its SSE/run wiring lives in
-  // interface/app.js, which this port must not touch. Teaching it to read a pre-picked scope
-  // back out (env/files/grep) would mean editing that frozen file, which is off-limits for a
-  // frontend-only P3 port. So the honest, simple seam: hand off to the frozen Run page and let
-  // the user pick env + scope there — it already has its own env pills and a Tests-scope
-  // dropdown for exactly this. No scope is stashed in sessionStorage since nothing on the other
-  // side would read it back; that would be silent, misleading plumbing.
+  // The Run page is now a real GRAIN-shelled route (P4) — hand off to it and let the user pick
+  // env + scope there via its own env pills and Tests-scope dropdown. No scope is stashed in
+  // sessionStorage since nothing on the other side reads it back yet (out of scope for P4); that
+  // would be silent, misleading plumbing.
   function goRun() {
-    location.href = '/#run';
+    location.href = '/run';
   }
   async function runOne(_t) { goRun(); }
   async function runSelected() { if (!selectedKeys.size) return; goRun(); }

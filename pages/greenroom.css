@@ -50,3 +50,60 @@
 @media (max-width: 768px) {
   .settings-page { padding: var(--space-4); gap: var(--space-4); }
 }
+
+/* ---- /tests layout (P3) --------------------------------------------------------------------
+   Reuses .settings-page's column/gap rhythm + every gr-* helper above (gr-form-row, gr-card-head,
+   gr-details, gr-check-row, section-head) where they fit; the classes below are the ones unique
+   to the Tests page's chip-group filter bars, grouped/collapsible test list, and inline edit
+   panels. Prefixed gr- per the same convention. */
+.tests-page { display: flex; flex-direction: column; gap: var(--space-6); padding: var(--space-6); }
+.tests-page .card { display: block; }
+
+.gr-bulk-bar { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+
+/* ---- grouped test list ---- */
+.gr-group-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) 0; margin-top: var(--space-3);
+  border-top: 1px solid var(--color-line); cursor: pointer; user-select: none;
+}
+.gr-group-head:first-child { margin-top: 0; }
+.gr-caret { display: inline-block; transition: transform 0.15s ease; }
+.gr-group-head.is-collapsed .gr-caret { transform: rotate(-90deg); }
+.gr-gname { font-weight: var(--font-weight-medium); }
+.gr-gcount { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-muted); }
+.gr-gstat { display: flex; gap: var(--space-1); margin-left: auto; }
+
+.gr-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.gr-row {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-2) 0; border-top: 1px solid var(--color-line);
+}
+.gr-row:first-child { border-top: 0; }
+.gr-row-main { flex: 1 1 auto; min-width: 0; }
+.gr-row-title { font-weight: var(--font-weight-medium); }
+.gr-row-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+.gr-row-sub { font-size: var(--text-sm); color: var(--color-muted); margin-top: var(--space-1); }
+.gr-row-actions {
+  display: flex; gap: var(--space-1); flex: 0 0 auto; align-items: center;
+  opacity: 0; transition: opacity 0.1s ease;
+}
+.gr-row:hover .gr-row-actions, .gr-row:focus-within .gr-row-actions { opacity: 1; }
+/* Touch has no hover — keep row actions visible so the panel isn't unreachable on a tablet
+   (same reasoning as grain's mobile catalog-peek tap-reveal). */
+@media (pointer: coarse) { .gr-row-actions { opacity: 1; } }
+
+/* ---- inline edit panels (Make inputs dynamic / Tag·priority·owner), toggled under a row ---- */
+.gr-panel {
+  padding: var(--space-3) 0 var(--space-4); border-top: 1px dashed var(--color-line);
+  display: flex; flex-direction: column; gap: var(--space-3);
+}
+.gr-panel-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.gr-input-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
+.gr-input-label { display: flex; flex-direction: column; gap: 0; flex: 1 1 12rem; }
+.gr-input-row .field { flex: 0 0 12rem; margin: 0; }
+
+@media (max-width: 768px) {
+  .tests-page { padding: var(--space-4); gap: var(--space-4); }
+  .gr-row-actions { opacity: 1; } /* narrow screens: no reliable hover either */
+}

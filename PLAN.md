@@ -164,6 +164,22 @@ consumer-extensible registry in grain). Door gets its OWN SSE stream, never the 
   shell renders, settings list populates from `/api/*`, ⌘K opens, **zero console errors**.
 - **P3 — Tests page.** Library, filters, tags/meta, rename/delete, dynamic inputs, record
   launcher. Verify: tag/group/rename/record/dynamic-input end-to-end vs P0 baseline.
+  **STATUS (2026-07-12): DONE + VERIFIED.** New **`/tests`** page (`pages/tests-page.ts` skeleton
+  + `pages/tests.js` client) reproduces the old Tests surface (interface/app.js ~405-675,
+  ~1476-1495) as grain `.card`/`.field`/`.btn`/`.badge` markup POSTing the IDENTICAL bodies to the
+  UNCHANGED `/api/{tests,recorded-inputs,apply-inputs,test-tags,test-meta,tests/rename,roles,
+  record,state}` — env picker, search, smart filters, @tag filter bar, grouped/collapsible test
+  list (select/Run/⌗ make-inputs-dynamic/🏷 tag-priority-owner/✎ rename/🗑 delete), bulk
+  select-all/run-selected/delete-selected, and the record launcher's "Log in as" role picker, all
+  demo-guarded like Settings. **Uses the new grain b-select + chip-group** (this page is why they
+  were built): chip-group for the env picker + smart filters (single-select) and the @tag bar
+  (multi-select), b-select for the Priority/input-generator/"Log in as" dropdowns. **Run seam:**
+  the Run page is still the frozen SPA (P4's to migrate), so Run/Run selected/Run by tag do not
+  trigger a run from this page — they hand off to the frozen SPA's `/#run` and let the user pick
+  env + scope there, rather than teaching `interface/app.js` (off-limits here) to read a stashed
+  scope back out. Old SPA at `/` byte-identical. Verified: `check` + `check:legacy` green,
+  `bun test lib` 14/14 (untouched), curl `/tests` (200, grain shell) + `/tests.js` (200, serves),
+  `/` unchanged.
 - **P4 — Run page.** Picker, scope, role, light, Run/Stop, console SSE, checklist
   (pending→settled rows), stat tiles, health bar, matrix. Verify: single+multi-env live
   runs; Stop kills workers; checklist reconciles from /api/results.

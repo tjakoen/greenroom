@@ -62,16 +62,19 @@ routes/selectors from any specific app).
 ## 4. Typecheck is green
 
 ```bash
-npx tsc --noEmit
+npm run check          # the real entry: tsc --noEmit -p tsconfig.next.json (server.ts + lib/ + pages/)
+npm run check:legacy   # the frozen SPA: plain tsc --noEmit
 ```
 
-Pass: no errors.
+Pass: both exit 0, no errors.
 
 ## 5. The app still boots
 
 ```bash
-# start on a scratch port, hit the state endpoint, stop — expect JSON with "status"
-PORT=4899 node interface/server.js & sleep 1; curl -s http://localhost:4899/api/state; echo; pkill -f "node interface/server.js"
+# start the real entry (bun) on a scratch port, hit the state endpoint, stop — expect JSON with "status"
+PORT=4899 bun server.ts & sleep 2; curl -s http://localhost:4899/api/state; echo; pkill -f "bun server.ts"
+# legacy frozen SPA still boots on node — optional sanity check
+# PORT=4899 node interface/server.js & sleep 1; curl -s http://localhost:4899/api/state; echo; pkill -f "node interface/server.js"
 ```
 
 Pass: returns JSON including `"status"` and the environment list.

@@ -59,15 +59,20 @@ environment's `baseURL` applies.
 
 ## Commands
 
+Requires **Bun** (<https://bun.sh>) — the app runs on `bun server.ts` — plus Node.js for
+Playwright. `npm start`/`npm run demo` shell out to bun.
+
 ```bash
-npm install                    # deps + Chromium (postinstall)
-npm start                      # the app: web interface at http://localhost:4321
+npm install                    # deps + Chromium (postinstall); if `bun install` flakes on
+                               #   the private GRAIN github deps, `npm install` git-clones them
+npm start                      # the app (bun server.ts): web interface at http://localhost:4321
 npm run menu                   # terminal menu runner (prompts for the environment)
 TEST_ENV=<env> npx playwright test   # run all tests against one environment
 npm run record                 # record a test by clicking through the site (opens a browser)
 npm run report                 # reopen the last HTML report
 npm run demo                   # boot read-only with seeded demo data (GREENROOM_DEMO=1)
-npx tsc --noEmit               # typecheck (must stay green)
+npm run check                  # typecheck the real entry (tsc -p tsconfig.next.json) — must stay green
+npm run check:legacy           # typecheck the frozen SPA (plain tsc --noEmit)
 ```
 
 Non-coders don't type these: the **🚀 Open Test App** VS Code task (`.vscode/tasks.json`)
@@ -146,9 +151,9 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 
 ## Definition of done
 
-> **Done = the change works end-to-end + `npx tsc --noEmit` is green + the docs in the
-> sync table above are updated + the interface still boots (`npm start`) + a memory if a
-> decision was made.**
+> **Done = the change works end-to-end + `npm run check` (and `npm run check:legacy`) is
+> green + the docs in the sync table above are updated + the app still boots
+> (`npm start` → `bun server.ts`) + a memory if a decision was made.**
 
 For anything a user touches, "works" means *driven the real flow*, not just typechecked.
 

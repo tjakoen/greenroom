@@ -30,6 +30,10 @@ node_modules/
 # "//dependencies" note + the bread-bun-nested-git blocker). Existing checkouts
 # run from node_modules/; do NOT try to regenerate a lock.
 bun.lock
+# npm can populate node_modules when bun install can't (it git-clones the nested
+# github deps instead of fetching codeload tarballs), but its lockfile is just as
+# stale/inconsistent as bun's here — don't commit it either.
+package-lock.json
 
 # Playwright output. Anchored to the repo root (leading /) so these DON'T also
 # match the committed demo/ fixtures (demo/test-results, demo/runs, …).

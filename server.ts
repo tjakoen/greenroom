@@ -47,6 +47,8 @@ import { resolveFfmpeg, clipStream } from "./lib/ffmpeg.ts";
 import { settingsBody } from "./pages/settings-page.ts";
 import { testsBody } from "./pages/tests-page.ts";
 import { runBody } from "./pages/run-page.ts";
+import { historyBody } from "./pages/history-page.ts";
+import { reportBugBody } from "./pages/report-bug-page.ts";
 
 const HERE = import.meta.dir;
 const INTERFACE = join(HERE, "interface");
@@ -78,8 +80,8 @@ const componentCss = createStyleBundle(bunRuntime, join(GRAIN_ROOT, "components"
 const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
   { key: "run", label: "Run", href: "/run", icon: "loop" },
   { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
-  { key: "history", label: "History", href: "/#history", icon: "traces" },
-  { key: "bug", label: "Report a bug", href: "/#bug", icon: "send" },
+  { key: "history", label: "History", href: "/history", icon: "traces" },
+  { key: "bug", label: "Report a bug", href: "/bug", icon: "send" },
   { key: "guide", label: "User guide", href: "/guide", icon: "knowledge" },
   { key: "plans", label: "Plans", href: "/plans", icon: "files" },
   { key: "catalog", label: "Catalog", href: "/catalog", icon: "spark" },
@@ -286,6 +288,20 @@ async function handle(req: Request): Promise<Response> {
   // /api/stream events interface/app.js does today. ----
   if (p === "/run") return new Response(grainPage("Run", runBody(), { active: "run" }), { headers: htmlHeaders });
   if (p === "/run.js") return serveStatic(join(HERE, "pages", "run.js"));
+
+  // ---- History (P5): server-rendered grain rows over the unchanged /api/{runs,pdf-data}
+  // endpoints below — history.js (a thin client module) does the fetch + re-render. "Report this"
+  // on a failed run hands off to /bug with the run + first failed test as query params. ----
+  if (p === "/history") return new Response(grainPage("History", historyBody(), { active: "history" }), { headers: htmlHeaders });
+  if (p === "/history.js") return serveStatic(join(HERE, "pages", "history.js"));
+
+  // ---- Report a bug (P5): server-rendered grain scrubber/summary over the unchanged /api/{runs,
+  // pdf-data,moment,bug-summary,pdf-image,video,video-clip,bug-bundle,pdf,ffmpeg-available}
+  // endpoints below — bug.js (a thin client module) reproduces the SPA's #/share surface (run/test
+  // pickers, screenshot scrubber + windowed moment logs, PDF/clip/bundle export). Reads the
+  // preselected run/test from its own URL query (the History "Report this" hand-off). ----
+  if (p === "/bug") return new Response(grainPage("Report a bug", reportBugBody(), { active: "bug" }), { headers: htmlHeaders });
+  if (p === "/bug.js") return serveStatic(join(HERE, "pages", "bug.js"));
 
   // ---- status + run control ----
   if (p === "/api/state") return json(publicState());

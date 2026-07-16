@@ -208,6 +208,22 @@ consumer-extensible registry in grain). Door gets its OWN SSE stream, never the 
 - **P5 — History + Report-a-bug.** Runs list; scrubber + moment logs + PDF + clip + bundle
   + video seeking. Verify: PDF window == preview window; clip hides without ffmpeg; bundle
   zip diffed vs P0 bundle.
+  **STATUS (2026-07-16): DONE + VERIFIED.** Two new GRAIN-shelled pages, frontend-only (every
+  endpoint already existed in `server.ts`/`lib/`): **`/history`** (`pages/history-page.ts` +
+  `pages/history.js`, filterable run rows over `/api/{runs,pdf-data}`, monochrome pass/fail glyph,
+  "Open report ↗" → `/runs/<id>/`, "Report this" on a failed run → `/bug?run=&test=&title=`) and
+  **`/bug`** (`pages/report-bug-page.ts` + `pages/bug.js`, ported near-verbatim from the SPA's
+  `#/share`: run/test pickers, markdown summary + full-log `<details>`, screenshot scrubber via
+  `/api/pdf-image`, windowed moment logs `[prevSnap.t, curSnap.t]`, video `<details>` with
+  `primeVideo` + Range/206, PDF `POST /api/pdf {run,test,i,from,to}`, bug-bundle, ffmpeg-gated
+  clip). The SPA's in-page `pendingShare` global is replaced by a URL query on `/bug` (the
+  History/Run "Report this" hand-off); NAV `/#history`→`/history`, `/#bug`→`/bug`; the Run page's
+  "Report this" now hands off to `/bug?title=` (was frozen `/#bug`). Verified: `check` +
+  `check:legacy` green; a headless-browser drive of both pages (History lists/filters/handoff;
+  Bug summary + scrubber image + moment logs + Next-steps + PDF download + clip-shown-with-ffmpeg
+  + title→test preselection) all PASS; `/api/bug-bundle` streams an 18-entry zip; `/api/video`
+  Range → 206. Old SPA at `/` byte-identical (nothing in NAV routes to it now). Onboarding card
+  still not ported (P4 gap, deferred to P6).
 - **P6 — cutover.** `/` = new Run page; delete interface/ SPA + server.js; demo parity
   drive; tasks/README/USER-GUIDE/CLAUDE sync table/AUDIT updated; run the full §5 checklist;
   fresh-clone sim (`rm -rf node_modules && bun run bootstrap && bun start`) + `bun run demo`.

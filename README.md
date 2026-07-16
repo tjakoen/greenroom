@@ -3,6 +3,7 @@
 [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/ten-times-zero)
 ![Playwright](https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white)
 ![Node](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
+![Bun](https://img.shields.io/badge/Bun-000000?logo=bun&logoColor=white)
 ![Zero-dep interface](https://img.shields.io/badge/interface_deps-0-2ea44f)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -23,14 +24,17 @@ around a populated dashboard with zero config. See [Try the demo](#try-the-demo)
 ## First time (once)
 
 1. Install **Node.js** (LTS) from <https://nodejs.org> — one-time, like installing any app.
-2. Install **VS Code** from <https://code.visualstudio.com> and open this folder in it
+2. Install **Bun** from <https://bun.sh> — one line in a terminal
+   (`curl -fsSL https://bun.sh/install | bash`, or `brew install bun` on a Mac). The app
+   runs on Bun; this is one-time.
+3. Install **VS Code** from <https://code.visualstudio.com> and open this folder in it
    (**File → Open Folder**). It'll offer to install the **Playwright** extension — say yes.
-3. Start the app without typing anything: **Terminal → Run Task → 🚀 Open Test App**. First
+4. Start the app without typing anything: **Terminal → Run Task → 🚀 Open Test App**. First
    run installs everything (a few minutes), then the app opens in your browser at
    <http://localhost:4321>.
-4. Add your **environments**: go to **Settings → Environments** and add each site you want to
+5. Add your **environments**: go to **Settings → Environments** and add each site you want to
    test (a name like `staging` and its URL). One is marked the default.
-5. Add your **roles & logins**: go to **Settings → Roles & logins**, create a role (e.g.
+6. Add your **roles & logins**: go to **Settings → Roles & logins**, create a role (e.g.
    `admin`), tick which sites it applies to, and type a username + password for each. Click
    **Save**. Passwords are written to a private `.env` file on your machine — never shown
    again, never shared or committed. (No file editing.) The role *definitions* (names +

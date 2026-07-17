@@ -101,9 +101,11 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 > **Migration note (BREAD, in progress — PLAN.md §4).** The entry point is **`server.ts`**, the
 > BATCH·GRAIN·MILL·PROOF composition root (`start` = `bun server.ts`; `start:legacy` = the old
 > `interface/server.js`). The whole domain lives in **`lib/*.ts`**; the `interface/server.js`
-> rows below describe the **frozen old SPA still served at `/`** (History/Report-a-bug); its
-> Run + Tests rows now describe the frozen SPA's copy only — the real Run and Tests pages have
-> moved (below), unchanged until the P6 cutover. Already migrated to real GRAIN-shelled routes (via
+> rows below describe the **frozen old SPA still served at `/`**. As of P5 **every page has a real
+> GRAIN route** — nothing in `NAV` points at the SPA anymore; it survives only at `/` until the P6
+> cutover deletes `interface/`. The frozen SPA's own Run/Tests/History/Report-a-bug rows below now
+> describe that dead copy only — the real pages have moved (below). Already migrated to real
+> GRAIN-shelled routes (via
 > `grainPage` in `server.ts`): **`/settings`** (`pages/settings-page.ts` + `pages/settings.js`,
 > forms over the unchanged `/api/*`), **`/tests`** (`pages/tests-page.ts` + `pages/tests.js`,
 > chip-group filters + b-select pickers over the unchanged `/api/{tests,recorded-inputs,
@@ -111,7 +113,14 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 > off to `/run`), **`/run`** (`pages/run-page.ts` + `pages/run.js`, the live SSE dashboard over the
 > unchanged `/api/{run,stop,stream,state,results,tests,roles,groups,creds}` — chip-group env
 > picker, b-select scope/role pickers, stat-tile/b-meter/status-list dashboard, table matrix for
-> multi-env; a failed row's Report-this hands off to the frozen `/#bug` until P5), **`/guide`** +
+> multi-env; a failed row's Report-this hands off to `/bug?title=`), **`/history`**
+> (`pages/history-page.ts` + `pages/history.js`, filterable run rows over `/api/{runs,pdf-data}`;
+> "Report this" on a failed run → `/bug?run=&test=&title=`), **`/bug`** (`pages/report-bug-page.ts`
+> + `pages/bug.js`, the Report-a-bug surface over the unchanged `/api/{runs,pdf-data,moment,
+> bug-summary,pdf-image,video,video-clip,bug-bundle,pdf,ffmpeg-available}` — run/test pickers,
+> markdown summary + full-log details, screenshot scrubber, windowed moment logs, video Range/206,
+> PDF/bundle/ffmpeg-clip export; the SPA's `pendingShare` global is replaced by the `/bug` URL
+> query), **`/guide`** +
 > **`/context`** (MILL), **`/plans`** (PROOF), **`/catalog`** (grain). Shell assets
 > (`/styles`,`/scripts`,`/assets`,`/fonts`,`/components.css`) are served from
 > the grain package; the shell chrome + nav live in `server.ts` `grainPage`/`NAV`, page-specific

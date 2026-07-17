@@ -13,8 +13,8 @@
 // (~281-297), startRun (~299-313), populateRunScope/resolveRunScope (~319-357, VERBATIM incl.
 // escRe), appendLine (~359-366), the env picker + saved site groups (~109-117, ~1245-1301),
 // setStatus (~120-134), the SSE wiring (~1322-1357) and reconcileResults/showLastRun
-// (~1442-1471). Report-a-bug is still the frozen SPA (P5) — a failed row's "Report this" hands
-// off to it (`location.href = '/#bug'`) rather than wiring goToShare here.
+// (~1442-1471). A failed row's "Report this" hands off to the migrated /bug page (P5) with the
+// test title as a ?title= query param (the multi-page replacement for the SPA's pendingShare).
 (() => {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -76,10 +76,14 @@
     const r = runRole || roleByTitle[title];
     return r ? ` <span class="cat-intro">as ${esc(r)}${runRole ? ' (override)' : ''}</span>` : '';
   }
-  // A failed row's "Report this" hands off to the frozen bug page — Report-a-bug is still the
-  // frozen SPA until P5, so this never wires goToShare.
-  function reportThis() {
-    location.href = '/#bug';
+  // A failed row's "Report this" hands off to the migrated /bug page (P5) with the latest run and
+  // this test's title preselected — /bug resolves the title to the test id on load (via its
+  // ?title= query param), the multi-page replacement for the SPA's pendingShare global. The run
+  // page only knows the test TITLE (its matrix is keyed by title), so pass that, not the test id.
+  function reportThis(title) {
+    const q = new URLSearchParams({ run: 'latest' });
+    if (title) q.set('title', title);
+    location.href = '/bug?' + q.toString();
   }
 
   // ------------------------------------------------------------------------------ dashboard
@@ -143,7 +147,7 @@
         tr.innerHTML =
           `<td>${esc(cleanTitle(title))}${roleLabel(title)}</td>${cells}` +
           `<td>${failed ? `<button class="btn" data-size="sm" type="button" data-report="1">Report this</button>` : ''}</td>`;
-        if (failed) tr.querySelector('[data-report]').onclick = reportThis;
+        if (failed) tr.querySelector('[data-report]').onclick = () => reportThis(title);
         tbody.appendChild(tr);
       }
       scroll.appendChild(table);
@@ -163,7 +167,7 @@
           `<span class="status-list__title">${esc(cleanTitle(title))}${roleLabel(title)}</span>` +
           `<span class="status-list__meta">${esc(s.time || '')}</span>` +
           (s.status === 'failed' ? `<button class="btn" data-size="sm" type="button" data-report="1">Report this</button>` : '');
-        if (s.status === 'failed') li.querySelector('[data-report]').onclick = reportThis;
+        if (s.status === 'failed') li.querySelector('[data-report]').onclick = () => reportThis(title);
         ul.appendChild(li);
       }
       mount.appendChild(ul);

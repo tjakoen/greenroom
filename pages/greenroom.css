@@ -210,3 +210,15 @@
   .history-page, .bug-page { padding: var(--space-4); gap: var(--space-4); }
   .gr-pdf-wrap.grid2 { grid-template-columns: 1fr; }
 }
+
+/* --------------------------------------------------------------------- /login (P1 Gate 2) --
+   The one page rendered WITHOUT the app-shell rail (no session yet, nothing to navigate to) —
+   server.ts serves login-page.ts's own standalone HTML, not wrapped in grainPage. A centered
+   card on the plain window backdrop, same restrained neutral look as every other page. */
+.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
+.login-card { width: 100%; max-width: 24rem; }
+.login-card__brand { font-weight: var(--font-weight-medium); color: var(--color-muted); margin-bottom: var(--space-4); }
+.login-form { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-4); }
+.login-card__divider { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-4) 0; color: var(--color-muted); font-size: var(--text-sm); }
+.login-card__divider::before, .login-card__divider::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--color-line); }
+.login-card .btn { width: 100%; }

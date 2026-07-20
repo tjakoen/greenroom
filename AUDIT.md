@@ -19,7 +19,9 @@ Logins live only in the git-ignored `.env`. Nothing real in tracked files.
 # .env must be ignored, .env.example must be tracked — expect ".env" ignored
 grep -nE '(^|/)\.env($|\s)' .gitignore || echo "MISSING: .env not git-ignored"
 # no real-looking passwords hardcoded in tests/config — expect zero hits
-grep -rnE "password\s*[:=]\s*['\"][^'\"]{3,}" tests config interface --include=*.ts --include=*.js | grep -viE "REPLACE_ME|getUser|placeholder|Selector"
+# (globs quoted so zsh doesn't abort on no-match; excludes CSS selectors like '#password',
+#  the data.password() generator ref, and saucedemo's intentionally-public demo password)
+grep -rnE "password\s*[:=]\s*['\"][^'\"]{3,}" tests config interface --include='*.ts' --include='*.js' | grep -viE "REPLACE_ME|getUser|placeholder|Selector|'#password'|data\.password|secret_sauce"
 ```
 
 Pass: `.env` is ignored, `.env.example` exists with only blank/placeholder values, zero

@@ -12,5 +12,5 @@
     "skipLibCheck": true,
     "types": ["bun-types"]
   },
-  "include": ["server.ts", "lib/**/*.ts"]
+  "include": ["server.ts", "lib/**/*.ts", "db/**/*.ts", "auth/**/*.ts", "pages/**/*.ts", "scripts/**/*.ts", "drizzle.config.ts"]
 }

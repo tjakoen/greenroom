@@ -251,6 +251,64 @@ canWrite(user, r) = user.isSuperadmin || r.ownerId === user.id
   the file write is scoped to `tests/` via the existing `validTestFile` traversal guard.
 - "Run this" from the editor enqueues a run of just that spec.
 
+**Built so far (ahead of p6-cutover — the editor is a new GRAIN route, touches no `interface/`):**
+- **P4-0 — grain `code-editor` organism** (`components/organisms/code-editor/`, CSS + catalog `.md`
+  + `.ai.md`). Monaco-free chrome by construction (grain ships no JS bundler): frame + toolbar +
+  `.code-editor__mount` slot the consumer injects the engine into + `data-state` status strip +
+  diagnostics list + `data-history` version drawer. Reuses code-block's mono/surface tokens so
+  MILL blog code and the editor read as one system. Committed in the grain monorepo clone
+  (`packages/grain/...`), **vendored** into greenroom's flat `node_modules/@tjakoen/grain` (nested-git
+  wall — see package.json `//dependencies`); auto-picked-up by `createStyleBundle` → `/components.css`
+  and auto-discovered by the catalog. Not yet pushed upstream / pinned (grain `main` went `packages/`
+  monorepo; greenroom stays on the flat vendored copy).
+- **P4-A — `pages/editor-api.ts`** (wired in `server.ts` dispatch after `environmentsApi`), over the
+  existing `test`/`testVersion` tables:
+  - `GET /api/test-source?file=` → the file's **disk** source (not the latest version row): other
+    writers (`applyInputs`/`saveTags`) touch the disk without a DB version, so disk is what the
+    runner runs + what reflects every edit. Scope-checked via the file's canonical `test` row.
+  - `PUT /api/test-source {file,source,message?}` → **parse guard** (Bun.Transpiler — rejects
+    unparseable TS before it reaches disk/runner), then `writeFileSync` + a new `testVersion` row +
+    `audit`. Traversal-guarded by `validTestFile`.
+  - `GET /api/test-versions?file=` (history, newest-first) + `GET /api/test-version?id=` (one
+    snapshot's source, for restore/diff).
+  - `POST /api/validate {file}` → the strong check: `playwright test --list <file>` compiles +
+    collects the spec in a browser-less Playwright context **without running** — catches import/
+    collection errors the parse guard misses (proven). Parse-guards first to skip the spawn on
+    syntax errors. Demo-guarded (no spawns/writes in demo).
+  - **Canonical test row:** versions are schema-keyed per `test()` row but the editor edits a whole
+    FILE, so the file's version chain anchors to one canonical row (oldest by `createdAt`, then `id`);
+    `ensureCanonicalTest` creates a minimal row (owned by the saver) for files with no `test` row yet.
+- **P4-B — `/editor` page** (`pages/editor-page.ts` skeleton + `pages/editor.js` client, NAV entry,
+  `active:"editor"`), rendering the grain `code-editor` chrome. Monaco is **lazy self-hosted**:
+  server.ts serves `node_modules/monaco-editor/min/vs` byte-preserving under `/vs/` (allow-listed
+  static, `serveVs` + `safeResolve` guard); editor.js injects `/vs/loader.js` on first file open
+  (classic AMD, `require.config({paths:{vs:'/vs'}})`), so Monaco's weight lands only on this page.
+  Wires: file picker (from `/api/tests`, deduped by file) → open (GET disk source) → edit (live
+  squiggles + dirty tracking) → **Save** (PUT, parse-guarded, ⌘S too) → **Validate** (POST, real
+  `--list`) → **History** drawer (versions, click a row to load an old snapshot into the buffer;
+  restore = Save it as a NEW version). Server diagnostics (layers 2/3) paint back as Monaco markers +
+  the `__diag` list (click-to-jump). On-brand light theme from grain's paper/ink tokens (dark →
+  vs-dark). `@playwright/test` given a compact ambient `.d.ts` for autocomplete; TS 2307
+  (module-not-found for relative helper imports Monaco can't resolve) silenced — the server `--list`
+  is the real module-resolution authority. **Verified end-to-end** in a headless authed browser
+  (13 checks: mount, load, edit→dirty, Save→version, History, Validate→valid, zero console errors).
+- **P4-C — done:** "Run this" (POST `/api/run {files:[spec]}` default env → navigate to `/run`;
+  confirms first if the buffer is dirty, since the runner executes the file on disk); a **restore
+  diff overlay** (clicking a history version opens a Monaco side-by-side diff of that version vs the
+  current buffer — non-destructive; Restore then loads it in as an edit, Save persists a new version);
+  and a **commit-message field** in the toolbar (sent as `message` on PUT, shown in the history rows).
+  Verified end-to-end (19 checks: + message persists to history, diff is non-destructive, restore →
+  dirty buffer, Run this → `/run`).
+- **Write-scope — RESOLVED (editing gated on READ, not write):** the earlier gap was that `canWrite`
+  (owner/superadmin/team-member) blocked non-owners from saving `visibility:'company'` specs (incl.
+  P1's `ownerId:'system'` imports). Fix: `putSource` gates on `canRead`, not `canWrite` — tests are
+  the collaborative artifact this tool edits, and the scope.ts doctrine is "company-internal,
+  everyone may read/write by default; scope is for accountability, not a wall." Anyone who can SEE a
+  spec can edit it; a private spec they can't read stays 403. Accountability is kept via
+  `testVersion.authorId` + audit on every save. This is deliberately looser than `canWrite`, which
+  still guards the sensitive resources (credentials/environments/roles) in their own APIs — the
+  change is scoped to editor-api only, scope.ts is untouched.
+
 ---
 
 ## 6. Server-side run queue

@@ -23,6 +23,7 @@ import type { ContentSource } from "@tjakoen/mill/serve.ts";
 import { escapeHtml } from "@tjakoen/mill/core/engine.ts";
 import { createProofRoutes } from "@tjakoen/proof/routes.ts";
 import { createCatalog } from "@tjakoen/grain/catalog/catalog.ts";
+import { madeWith } from "@tjakoen/grain/scripts/made-with.js";
 
 import { guardRequest } from "./lib/guard.ts";
 import { serveFileRanged, safeResolve, mimeOf } from "./lib/binary.ts";
@@ -154,6 +155,10 @@ function grainPage(title: string, body: string, opts: { active?: string } = {}):
       ${railNav(active)}
     </aside>
     <main class="app-shell__main">${body}</main>
+    <footer class="app-shell__status status-bar">
+      <span class="status-bar__spacer"></span>
+      ${madeWith({ inline: true })}
+    </footer>
   </div>
   <div id="toast" class="gr-toast" role="status" aria-live="polite"></div>
   <script src="/scripts/shell.js" defer></script>

@@ -60,6 +60,8 @@ import { accountsApi } from "./pages/accounts-api.ts";
 import { accountsBody } from "./pages/accounts-page.ts";
 import { environmentsApi } from "./pages/environments-api.ts";
 import { environmentsBody } from "./pages/environments-page.ts";
+import { editorApi } from "./pages/editor-api.ts";
+import { editorBody } from "./pages/editor-page.ts";
 
 const HERE = import.meta.dir;
 const INTERFACE = join(HERE, "interface");
@@ -85,12 +87,26 @@ const serveGrainAssets = makeStatic(bunRuntime, join(GRAIN_ROOT, "assets"));
 const serveGrainFonts = makeStatic(bunRuntime, join(GRAIN_ROOT, "fonts"));
 const componentCss = createStyleBundle(bunRuntime, join(GRAIN_ROOT, "components"));
 
+// Monaco's classic-AMD self-host assets (P4 editor): served static under /vs/, byte-preserving
+// (min/vs ships codicon.ttf — a binary that makeStatic's text-read would corrupt), lazily loaded
+// only by the /editor page. Proven in spike/monaco (plans/platform.md §8 verdict). The .ttf/.woff
+// types monaco can carry aren't in binary.ts's MIME map, so pass them explicitly here.
+const MONACO_VS = join(ROOT, "node_modules", "monaco-editor", "min", "vs");
+const VS_MIME: Record<string, string> = { ".ttf": "font/ttf", ".woff": "font/woff", ".woff2": "font/woff2" };
+async function serveVs(req: Request, rel: string): Promise<Response> {
+  const abs = safeResolve(MONACO_VS, rel === "" || rel === "/" ? "loader.js" : rel);
+  if (!abs) return new Response("Forbidden", { status: 403 });
+  const ext = abs.slice(abs.lastIndexOf("."));
+  return serveFileRanged(req, abs, VS_MIME[ext]);
+}
+
 // The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. History/
 // Report a bug still point into the frozen old SPA (hash routes) — their own grain page lands
 // P5; User guide/Plans/Catalog/Settings/Tests/Run wear the new shell today.
 const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
   { key: "run", label: "Run", href: "/run", icon: "loop" },
   { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
+  { key: "editor", label: "Editor", href: "/editor", icon: "files" },
   { key: "history", label: "History", href: "/history", icon: "traces" },
   { key: "bug", label: "Report a bug", href: "/bug", icon: "send" },
   { key: "environments", label: "Environments", href: "/environments", icon: "rules" },
@@ -271,7 +287,7 @@ async function handle(req: Request): Promise<Response> {
   if (!IS_DEMO) {
     const gateAllowed =
       p === "/login" || p === "/login.js" ||
-      p.startsWith("/styles/") || p.startsWith("/scripts/") || p.startsWith("/assets/") || p.startsWith("/fonts/") ||
+      p.startsWith("/styles/") || p.startsWith("/scripts/") || p.startsWith("/assets/") || p.startsWith("/fonts/") || p.startsWith("/vs/") ||
       p === "/components.css" || p === "/greenroom.css" || p.startsWith("/favicon") ||
       p === "/" || p === "/index.html" || p === "/app.js" || p === "/styles.css";
     if (!gateAllowed) {
@@ -292,7 +308,7 @@ async function handle(req: Request): Promise<Response> {
   // above (canRead/canWrite + superadmin enforced inside each handler). ----
   {
     const ctx = { req, url, p, method, qp, user };
-    const p2 = (await adminApi(ctx)) ?? (await accountsApi(ctx)) ?? (await environmentsApi(ctx));
+    const p2 = (await adminApi(ctx)) ?? (await accountsApi(ctx)) ?? (await environmentsApi(ctx)) ?? (await editorApi(ctx));
     if (p2) return p2;
   }
 
@@ -313,6 +329,7 @@ async function handle(req: Request): Promise<Response> {
   if (p.startsWith("/scripts/")) return serveGrainScripts(p.slice("/scripts".length));
   if (p.startsWith("/assets/")) return serveGrainAssets(p.slice("/assets".length));
   if (p.startsWith("/fonts/")) return serveGrainFonts(p.slice("/fonts".length));
+  if (p.startsWith("/vs/")) return serveVs(req, p.slice("/vs/".length));
   if (p === "/favicon.ico") return new Response(null, { status: 204 });
   if (p === "/components.css") return new Response(await componentCss.css(), { headers: { "Content-Type": "text/css" } });
   if (p === "/greenroom.css") return serveStatic(join(HERE, "pages", "greenroom.css"));
@@ -352,6 +369,12 @@ async function handle(req: Request): Promise<Response> {
   // run from here. ----
   if (p === "/tests") return new Response(grainPage("Tests", testsBody(), { active: "tests" }), { headers: htmlHeaders });
   if (p === "/tests.js") return serveStatic(join(HERE, "pages", "tests.js"));
+
+  // ---- Editor (P4): in-browser Playwright test editing — Monaco (lazy, self-hosted at /vs/)
+  // mounted into the grain code-editor organism, over /api/{test-source,test-versions,test-version,
+  // validate,tests}. editor.js does the fetch + Monaco wiring; the page skeleton is grain chrome. ----
+  if (p === "/editor") return new Response(grainPage("Editor", editorBody(), { active: "editor" }), { headers: htmlHeaders });
+  if (p === "/editor.js") return serveStatic(join(HERE, "pages", "editor.js"));
 
   // ---- Run (P4): server-rendered grain chip-group/stat-tile/b-meter/status-list over the
   // unchanged /api/{run,stop,stream,state,results,tests,roles,groups,creds} endpoints below —

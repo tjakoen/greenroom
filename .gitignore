@@ -21,6 +21,9 @@ config/groups.json
 # Internal planning notes — kept locally, not part of the open-source repo.
 GRAIN-PLAN.md
 
+# Runtime SQLite db (data/greenroom.db + WAL/SHM). Shared runtime state, never committed.
+/data/
+
 # Dependencies
 node_modules/
 

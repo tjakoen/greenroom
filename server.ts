@@ -27,7 +27,10 @@ import { madeWith } from "@tjakoen/grain/scripts/made-with.js";
 
 import { guardRequest } from "./lib/guard.ts";
 import { serveFileRanged, safeResolve, mimeOf } from "./lib/binary.ts";
-import { ROOT, PORT, readFileMaybe } from "./lib/paths.ts";
+import { ROOT, PORT, IS_DEMO, readFileMaybe } from "./lib/paths.ts";
+import { runAppMigrations } from "./db/index.ts";
+import { auth, runAuthMigrations, getSessionUser } from "./auth/index.ts";
+import { ensureDefaultOrg } from "./auth/bootstrap.ts";
 import { state, publicState, runStream } from "./lib/run-stream.ts";
 import {
   loadUrls, envNames, sanitizeLoginForm, saveEnv, saveSharedLogin, deleteEnv,
@@ -46,10 +49,20 @@ import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
 import { buildPdf } from "./lib/pdf.ts";
 import { resolveFfmpeg, clipStream } from "./lib/ffmpeg.ts";
 import { settingsBody } from "./pages/settings-page.ts";
+import { loginBody } from "./pages/login-page.ts";
 import { testsBody } from "./pages/tests-page.ts";
 import { runBody } from "./pages/run-page.ts";
 import { historyBody } from "./pages/history-page.ts";
 import { reportBugBody } from "./pages/report-bug-page.ts";
+// ---- P2 platform pages + scoped/audited API handlers (wired below) ----
+import { adminApi } from "./pages/admin-api.ts";
+import { adminBody } from "./pages/admin-page.ts";
+import { accountsApi } from "./pages/accounts-api.ts";
+import { accountsBody } from "./pages/accounts-page.ts";
+import { environmentsApi } from "./pages/environments-api.ts";
+import { environmentsBody } from "./pages/environments-page.ts";
+import { editorApi } from "./pages/editor-api.ts";
+import { editorBody } from "./pages/editor-page.ts";
 
 const HERE = import.meta.dir;
 const INTERFACE = join(HERE, "interface");
@@ -75,17 +88,34 @@ const serveGrainAssets = makeStatic(bunRuntime, join(GRAIN_ROOT, "assets"));
 const serveGrainFonts = makeStatic(bunRuntime, join(GRAIN_ROOT, "fonts"));
 const componentCss = createStyleBundle(bunRuntime, join(GRAIN_ROOT, "components"));
 
+// Monaco's classic-AMD self-host assets (P4 editor): served static under /vs/, byte-preserving
+// (min/vs ships codicon.ttf — a binary that makeStatic's text-read would corrupt), lazily loaded
+// only by the /editor page. Proven in spike/monaco (plans/platform.md §8 verdict). The .ttf/.woff
+// types monaco can carry aren't in binary.ts's MIME map, so pass them explicitly here.
+const MONACO_VS = join(ROOT, "node_modules", "monaco-editor", "min", "vs");
+const VS_MIME: Record<string, string> = { ".ttf": "font/ttf", ".woff": "font/woff", ".woff2": "font/woff2" };
+async function serveVs(req: Request, rel: string): Promise<Response> {
+  const abs = safeResolve(MONACO_VS, rel === "" || rel === "/" ? "loader.js" : rel);
+  if (!abs) return new Response("Forbidden", { status: 403 });
+  const ext = abs.slice(abs.lastIndexOf("."));
+  return serveFileRanged(req, abs, VS_MIME[ext]);
+}
+
 // The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. History/
 // Report a bug still point into the frozen old SPA (hash routes) — their own grain page lands
 // P5; User guide/Plans/Catalog/Settings/Tests/Run wear the new shell today.
 const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
   { key: "run", label: "Run", href: "/run", icon: "loop" },
   { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
+  { key: "editor", label: "Editor", href: "/editor", icon: "files" },
   { key: "history", label: "History", href: "/history", icon: "traces" },
   { key: "bug", label: "Report a bug", href: "/bug", icon: "send" },
+  { key: "environments", label: "Environments", href: "/environments", icon: "rules" },
+  { key: "accounts", label: "Accounts", href: "/accounts", icon: "pin" },
   { key: "guide", label: "User guide", href: "/guide", icon: "knowledge" },
   { key: "plans", label: "Plans", href: "/plans", icon: "files" },
   { key: "catalog", label: "Catalog", href: "/catalog", icon: "spark" },
+  { key: "admin", label: "Admin", href: "/admin", icon: "settings", footer: true },
   { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true },
 ];
 // Only the real, single-page destinations belong in the catalog's page-nav / a component search
@@ -247,6 +277,46 @@ async function handle(req: Request): Promise<Response> {
   const method = req.method.toUpperCase();
   const qp = url.searchParams;
 
+  // ---- auth (P1 Gate 2): better-auth owns every /api/auth/* route (sign-up/sign-in/sign-out/
+  // get-session/...) — mount it before any other dispatch so it's reachable without a session. ----
+  if (p.startsWith("/api/auth")) return auth.handler(req);
+
+  // ---- session gate (P1 Gate 2): every route below this line requires a session EXCEPT this
+  // allow-list — /api/auth/* (already handled above), the /login page + its client module, and
+  // every static/shell asset (the rail chrome + the legacy SPA at "/" must stay reachable so the
+  // browser can even render the /login page). Demo mode is read-only + public — skip the gate
+  // entirely so `npm run demo` keeps working with no accounts. ----
+  // Resolved once past the gate (non-null for every gated route in non-demo mode); handed to the
+  // P2 scoped API handlers below. Null in demo mode (gate skipped) — those handlers 401 on it.
+  let user: Awaited<ReturnType<typeof getSessionUser>> = null;
+  if (!IS_DEMO) {
+    const gateAllowed =
+      p === "/login" || p === "/login.js" ||
+      p.startsWith("/styles/") || p.startsWith("/scripts/") || p.startsWith("/assets/") || p.startsWith("/fonts/") || p.startsWith("/vs/") ||
+      p === "/components.css" || p === "/greenroom.css" || p.startsWith("/favicon") ||
+      p === "/" || p === "/index.html" || p === "/app.js" || p === "/styles.css";
+    if (!gateAllowed) {
+      user = await getSessionUser(req);
+      if (!user) {
+        // /api/* → 401 JSON (a fetch caller decides what to do); every other route is a page →
+        // 302 to /login. Keyed on the path, not the Accept header — real navigations don't
+        // reliably send one, and this is the same split the rest of the app already uses (okOr/
+        // json vs serveStatic).
+        if (p.startsWith("/api/")) return json({ error: "unauthenticated" }, 401);
+        return new Response(null, { status: 302, headers: { Location: "/login" } });
+      }
+    }
+  }
+
+  // ---- P2 scoped + audited platform APIs. Each handler owns its own /api/{admin,accounts,
+  // environments}/* prefix and returns null to fall through. `user` is the ScopedUser resolved
+  // above (canRead/canWrite + superadmin enforced inside each handler). ----
+  {
+    const ctx = { req, url, p, method, qp, user };
+    const p2 = (await adminApi(ctx)) ?? (await accountsApi(ctx)) ?? (await environmentsApi(ctx)) ?? (await editorApi(ctx));
+    if (p2) return p2;
+  }
+
   // The single-doc guide is served at /guide by MILL (which lists it as /guide/user-guide).
   const millPath = p === "/guide" ? "/guide/user-guide" : p;
   const fromProof = await proofRoutes(p);
@@ -264,6 +334,7 @@ async function handle(req: Request): Promise<Response> {
   if (p.startsWith("/scripts/")) return serveGrainScripts(p.slice("/scripts".length));
   if (p.startsWith("/assets/")) return serveGrainAssets(p.slice("/assets".length));
   if (p.startsWith("/fonts/")) return serveGrainFonts(p.slice("/fonts".length));
+  if (p.startsWith("/vs/")) return serveVs(req, p.slice("/vs/".length));
   if (p === "/favicon.ico") return new Response(null, { status: 204 });
   if (p === "/components.css") return new Response(await componentCss.css(), { headers: { "Content-Type": "text/css" } });
   if (p === "/greenroom.css") return serveStatic(join(HERE, "pages", "greenroom.css"));
@@ -274,10 +345,27 @@ async function handle(req: Request): Promise<Response> {
     return json({ pages, components });
   }
 
+  // ---- Login (P1 Gate 2): the one page NOT wrapped in grainPage — there's no session yet, so
+  // there's nothing to navigate to and no rail to show. loginBody() returns its own complete
+  // standalone HTML document (own <head>, own minimal stylesheet set). Not in NAV — it isn't a
+  // rail destination. ----
+  if (p === "/login") return new Response(loginBody(), { headers: htmlHeaders });
+  if (p === "/login.js") return serveStatic(join(HERE, "pages", "login.js"));
+
   // ---- Settings (P2): server-rendered grain forms over the unchanged /api/{envs,roles,creds,
   // groups} endpoints below — settings.js (a thin client module) does the fetch + re-render. ----
   if (p === "/settings") return new Response(grainPage("Settings", settingsBody(), { active: "settings" }), { headers: htmlHeaders });
   if (p === "/settings.js") return serveStatic(join(HERE, "pages", "settings.js"));
+
+  // ---- P2 platform pages: Environments (DB + dual-write urls.json), Accounts (scoped test-target
+  // creds), Admin (superadmin-only user/team management). Client modules fetch the /api handlers
+  // dispatched above. ----
+  if (p === "/environments") return new Response(grainPage("Environments", environmentsBody(), { active: "environments" }), { headers: htmlHeaders });
+  if (p === "/environments.js") return serveStatic(join(HERE, "pages", "environments.js"));
+  if (p === "/accounts") return new Response(grainPage("Accounts", accountsBody(), { active: "accounts" }), { headers: htmlHeaders });
+  if (p === "/accounts.js") return serveStatic(join(HERE, "pages", "accounts.js"));
+  if (p === "/admin") return new Response(grainPage("Admin", adminBody(), { active: "admin" }), { headers: htmlHeaders });
+  if (p === "/admin.js") return serveStatic(join(HERE, "pages", "admin.js"));
 
   // ---- Tests (P3): server-rendered grain chip-group/b-select over the unchanged /api/{tests,
   // recorded-inputs,apply-inputs,test-tags,test-meta,tests/rename,roles,record,state} endpoints
@@ -286,6 +374,12 @@ async function handle(req: Request): Promise<Response> {
   // run from here. ----
   if (p === "/tests") return new Response(grainPage("Tests", testsBody(), { active: "tests" }), { headers: htmlHeaders });
   if (p === "/tests.js") return serveStatic(join(HERE, "pages", "tests.js"));
+
+  // ---- Editor (P4): in-browser Playwright test editing — Monaco (lazy, self-hosted at /vs/)
+  // mounted into the grain code-editor organism, over /api/{test-source,test-versions,test-version,
+  // validate,tests}. editor.js does the fetch + Monaco wiring; the page skeleton is grain chrome. ----
+  if (p === "/editor") return new Response(grainPage("Editor", editorBody(), { active: "editor" }), { headers: htmlHeaders });
+  if (p === "/editor.js") return serveStatic(join(HERE, "pages", "editor.js"));
 
   // ---- Run (P4): server-rendered grain chip-group/stat-tile/b-meter/status-list over the
   // unchanged /api/{run,stop,stream,state,results,tests,roles,groups,creds} endpoints below —
@@ -486,6 +580,18 @@ async function handle(req: Request): Promise<Response> {
 
   return new Response("Not found", { status: 404 });
 }
+
+// ---------------------------------------------------------------------- boot migrations
+// One physical db file (data/greenroom.db), two migration runners (plans/platform.md §3 "table
+// ownership" box): better-auth's own runner creates its tables first, then drizzle's migrate()
+// creates ours. Runs every boot; both are no-ops once the schema is current. Top-level await is
+// fine under bun.
+await runAuthMigrations();
+runAppMigrations();
+// Single default organization + "Unassigned" team (plans/platform.md §2) — idempotent, must run
+// after both migration runners so `organization`/`team` exist. auth/index.ts's databaseHooks
+// joins every new user to these on creation.
+ensureDefaultOrg();
 
 // ---------------------------------------------------------------------- serve
 try {

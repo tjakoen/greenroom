@@ -210,3 +210,33 @@
   .history-page, .bug-page { padding: var(--space-4); gap: var(--space-4); }
   .gr-pdf-wrap.grid2 { grid-template-columns: 1fr; }
 }
+
+/* --------------------------------------------------------------------- /login (P1 Gate 2) --
+   The one page rendered WITHOUT the app-shell rail (no session yet, nothing to navigate to) —
+   server.ts serves login-page.ts's own standalone HTML, not wrapped in grainPage. A centered
+   card on the plain window backdrop, same restrained neutral look as every other page. */
+.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
+.login-card { width: 100%; max-width: 24rem; }
+.login-card__brand { font-weight: var(--font-weight-medium); color: var(--color-muted); margin-bottom: var(--space-4); }
+.login-form { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-4); }
+.login-card__divider { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-4) 0; color: var(--color-muted); font-size: var(--text-sm); }
+.login-card__divider::before, .login-card__divider::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--color-line); }
+.login-card .btn { width: 100%; }
+
+/* ---- /editor (P4): the grain code-editor organism fills the viewport below the page header so
+   Monaco (which needs a real pixel height, not auto) has room; the mount owns the scroll. ------ */
+.editor-page { display: flex; flex-direction: column; }
+.editor-page .code-editor { height: min(72vh, 900px); min-height: 420px; }
+.editor-page .code-editor__bar .field { min-width: 16rem; }
+.editor-page .code-editor__mount .monaco-editor { position: absolute; }
+
+/* /editor P4-C: the change-message input in the toolbar + the restore diff overlay. */
+.editor-page .ed-msg { max-width: 15rem; font-family: var(--font-grain); }
+.editor-page .ed-diff { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column;
+  background: var(--color-bg); border: 2px solid var(--hairline); border-radius: var(--radius-md); }
+.editor-page .ed-diff[hidden] { display: none; }
+.editor-page .ed-diff__head { flex: 0 0 auto; display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-line);
+  font-family: var(--font-grain); font-size: var(--text-sm); }
+.editor-page .ed-diff__label { flex: 1; color: var(--color-muted); font-size: var(--text-xs); }
+.editor-page .ed-diff__mount { flex: 1 1 0; min-height: 0; }

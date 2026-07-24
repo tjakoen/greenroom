@@ -23,20 +23,46 @@ export function isLoopbackOrigin(origin: string | null | undefined): boolean {
   }
 }
 
+/** Deployment allowlist (platform): the host(s) this instance is served on behind a reverse
+ *  proxy. Set ALLOWED_HOSTS (comma-separated, e.g. "greenroom.example.com") to serve a real
+ *  domain. UNSET → loopback-only, i.e. today's local-app behavior is completely unchanged.
+ *  NOTE: this widens the anti-DNS-rebinding/CSRF surface — a deployed instance must sit behind
+ *  a TLS-terminating proxy + rely on better-auth sessions; a full deploy security review is
+ *  tracked in plans/platform.md §10 (DEPLOY.md). */
+function allowedHosts(): string[] {
+  return String(process.env.ALLOWED_HOSTS || "")
+    .split(",").map((s) => s.trim().replace(/^https?:\/\//, "").replace(/:\d+$/, "").toLowerCase()).filter(Boolean);
+}
+export function isAllowedHost(host: string | null | undefined): boolean {
+  if (isLoopbackHost(host)) return true;
+  if (!host) return true;
+  const h = String(host).replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
+  return allowedHosts().includes(h);
+}
+export function isAllowedOrigin(origin: string | null | undefined): boolean {
+  if (isLoopbackOrigin(origin)) return true;
+  try {
+    return isAllowedHost(new URL(origin as string).host);
+  } catch {
+    return false;
+  }
+}
+
 /** Apply the three local-only guards to an incoming request. Returns a rejecting Response
  *  when the request must be refused, or null when it is allowed through. Mirrors
  *  interface/server.js lines 1478–1504 exactly (Node http → Fetch API). */
 export function guardRequest(req: Request): Response | null {
-  // Serve loopback Hosts only.
-  if (!isLoopbackHost(req.headers.get("host"))) {
+  // Serve loopback Hosts only (or the configured ALLOWED_HOSTS on a deployed instance).
+  if (!isAllowedHost(req.headers.get("host"))) {
     return new Response("Forbidden", { status: 403, headers: { "Content-Type": "text/plain" } });
   }
   const method = req.method.toUpperCase();
   if (method !== "GET" && method !== "HEAD") {
-    // Reject cross-origin writes (CSRF): a state-changing request carrying a non-loopback
-    // Origin is a foreign page poking our local API. Our own UI sends a loopback Origin (or none).
+    // Reject cross-origin writes (CSRF): a state-changing request carrying an Origin that is
+    // neither loopback nor an allowed deployment host is a foreign page poking our API. Our own
+    // UI sends a same-origin Origin (or none).
     const origin = req.headers.get("origin");
-    if (origin && !isLoopbackOrigin(origin)) {
+    if (origin && !isAllowedOrigin(origin)) {
       return Response.json({ ok: false, error: "Cross-origin request refused." }, { status: 403 });
     }
     // A POST that carries a body must declare JSON. This blocks a cross-origin "simple" form

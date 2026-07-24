@@ -656,7 +656,10 @@ tickQueue();
 try {
   Bun.serve({
     port: PORT,
-    hostname: "127.0.0.1", // loopback only — this is a local app; never expose it to the LAN.
+    // Loopback-only by default (local app). Set HOST=0.0.0.0 to bind all interfaces for a
+    // deployed instance BEHIND a TLS-terminating reverse proxy + ALLOWED_HOSTS (see DEPLOY.md);
+    // never expose 0.0.0.0 directly to a network without the proxy + a session in front.
+    hostname: process.env.HOST ?? "127.0.0.1",
     // Wrap every request so one thrown error returns a 500 instead of taking the server down — a
     // silently dead page is the worst failure mode for a non-coder.
     async fetch(req) {

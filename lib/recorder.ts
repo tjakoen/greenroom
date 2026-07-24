@@ -116,6 +116,14 @@ async function preAuth(env: string, role: string): Promise<{ ok: boolean; error?
 
 export async function startRecording(env: string, name: string, role?: string): Promise<RecordResult> {
   if (IS_DEMO) return denyInDemo;
+  // P5 Gate E (plans/platform.md §10): recording launches `playwright codegen` — a REAL browser
+  // window on the machine running the server. That only makes sense locally; a deployed instance
+  // is headless (no screen), so refuse with a clear pointer instead of spawning a doomed codegen.
+  // ALLOWED_HOSTS is the deploy signal (see DEPLOY.md / lib/guard.ts). Recording stays an
+  // exclusive, LOCAL-ONLY action — never a queued run.
+  if (process.env.ALLOWED_HOSTS) {
+    return { ok: false, error: "Recording opens a real browser on the server host — unavailable on a deployed instance (no screen). Record locally with greenroom, or author/edit specs in the in-browser editor (/editor)." };
+  }
   // Gate B: recording is still exclusive with a real run — the run map replaced the shared
   // singleton, so that check now needs its own lookup alongside recordingState's own guard.
   if (recordingState.proc || recordingState.recording || getActiveRun()) {

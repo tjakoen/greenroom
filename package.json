@@ -23,19 +23,19 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
+    "@tjakoen/pantry": "github:tjakoen/pantry#f17eddf",
     "@types/node": "^20.0.0",
     "bun-types": "^1.3.14",
     "dotenv": "^16.4.5",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.6.0"
   },
-  "//dependencies": "INTENTIONALLY LOCKLESS (bun.lock gitignored). greenroom -> @tjakoen/pantry(git) -> tjakoen.github.io(git) is a nested github git-dep graph bun cannot resolve from scratch, so the repo RUNS FROM THIS CHECKOUT'S node_modules (a fresh clone can't reinstall from zero until the nesting is flattened — tracked as deploy hardening in plans/platform.md §10). 2026-07-20 grain-monorepo cutover: grain · mill · proof · batch are PUBLISHED packages (GitHub Packages, @tjakoen scope → see .npmrc), pinned ^0.1.x; only pantry stays a github git-dep. grain@^0.1.8 (main tip) carries b-select/chip-group/stat-tile/b-meter/status-list + the :focus-visible focus-ring fix natively; the P4 in-browser editor's grain organisms/code-editor chrome is VENDORED into node_modules/@tjakoen/grain until published grain carries it. PLATFORM DEPS (added via incremental `bun add` onto the vendored tree, never a from-scratch resolve): better-auth + @better-auth/sso (accounts/SSO/teams), drizzle-orm (over embedded bun:sqlite), monaco-editor (P4 editor, self-hosted byte-served from node_modules/monaco-editor/min/vs). drizzle-kit is a devDependency (migrations).",
+  "//dependencies": "INTENTIONALLY LOCKLESS (bun.lock gitignored). greenroom -> @tjakoen/pantry(git) -> tjakoen.github.io(git) is a nested github git-dep graph bun cannot resolve from scratch, so the repo RUNS FROM THIS CHECKOUT'S node_modules (a fresh clone can't reinstall from zero until the nesting is flattened — tracked as deploy hardening in plans/platform.md §10). 2026-07-20 grain-monorepo cutover: grain · mill · proof · batch are PUBLISHED packages (GitHub Packages, @tjakoen scope → see .npmrc), pinned ^0.1.x. The sole remaining github git-dep is @tjakoen/pantry, and it is now a devDependency (component-catalog cockpit, never imported at runtime), so a RUNTIME install `bun install --production` resolves cleanly from GitHub Packages (needs GITHUB_TOKEN, see .npmrc) and DOES NOT hit the nested wall — only a full dev install (which pulls pantry for the cockpit) still does, and dev runs from the vendored tree. grain@^0.1.8 (main tip) carries b-select/chip-group/stat-tile/b-meter/status-list + the :focus-visible focus-ring fix natively; the P4 in-browser editor's grain organisms/code-editor chrome is VENDORED into node_modules/@tjakoen/grain until published grain carries it. PLATFORM DEPS (added via incremental `bun add` onto the vendored tree, never a from-scratch resolve): better-auth + @better-auth/sso (accounts/SSO/teams), drizzle-orm (over embedded bun:sqlite), monaco-editor (P4 editor, self-hosted byte-served from node_modules/monaco-editor/min/vs). drizzle-kit is a devDependency (migrations).",
   "dependencies": {
     "@better-auth/sso": "1.6.23",
     "@tjakoen/batch": "^0.1.0",
     "@tjakoen/grain": "^0.1.8",
     "@tjakoen/mill": "^0.1.2",
-    "@tjakoen/pantry": "github:tjakoen/pantry#f17eddf",
     "@tjakoen/proof": "^0.1.2",
     "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",

@@ -82,13 +82,37 @@ Everything durable lives in two places — back both up:
 `SECRET_KEY` is NOT in these — store it in your secret manager. Without it the encrypted
 `credential` values can't be decrypted (re-enter them).
 
-## Install (known limitation)
+## Install
 
-A **fresh clone cannot `npm install`/`bun install` from scratch today.** `@tjakoen/pantry` is a
-GitHub git-dep with its own nested git-deps that Bun can't resolve from zero, and the `@tjakoen/*`
-published packages come from **GitHub Packages** (`.npmrc` → `npm.pkg.github.com`), which needs a
-`GITHUB_TOKEN` with `read:packages`. The instance therefore **runs from an existing, working
-`node_modules`** (copied/rsynced with the deploy artifact). Flattening the pantry nesting (or
-publishing pantry) + providing the GitHub Packages token is the work needed to make a clean
-install reproducible — tracked in [plans/platform.md](plans/platform.md) §10. Until then: deploy
-the app **with its `node_modules`** rather than reinstalling on the target.
+**Runtime (deploy/CI) install now works from scratch** — with one prerequisite. All runtime
+dependencies are either public npm packages (`better-auth`, `drizzle-orm`, `monaco-editor`,
+`@better-auth/sso`) or **GitHub Packages** publishes (`@tjakoen/{batch,grain,mill,proof}` — see
+`.npmrc` → `npm.pkg.github.com`). GitHub Packages needs auth, so before installing, add a token
+line to your environment's `.npmrc` (do NOT commit it) and export a token with `read:packages`:
+
+```
+# ~/.npmrc or CI env — token NOT committed
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+Then a runtime install resolves cleanly:
+
+```
+GITHUB_TOKEN=<pat> bun install --production   # skips devDependencies
+bun run postinstall                            # installs the Playwright browser
+```
+
+`--production` is what unblocks it: **`@tjakoen/pantry` is the only remaining GitHub *git*-dep**
+(a nested graph Bun can't resolve from zero), and it is a **devDependency** — the component-catalog
+cockpit (`bunx pantry`), never imported at runtime. A production install omits it entirely.
+
+**Dev install (with the cockpit) still hits the nested-git wall** — a full `bun install` pulls
+`pantry`, which fails to resolve from scratch — so local development still runs from an existing
+vendored `node_modules`. Flattening/publishing `pantry` removes that last wrinkle
+(tracked in [plans/platform.md](plans/platform.md) §10). For deploy, prefer the `--production`
+path above, or ship the app **with a working `node_modules`** as the artifact.
+
+> Two additional caveats for a from-scratch deploy install: (1) published `@tjakoen/grain@^0.1.8`
+> may not yet carry the P4 editor's `organisms/code-editor` chrome (currently vendored) — if the
+> `/editor` page renders unstyled, that component still needs publishing. (2) `monaco-editor`'s
+> `min/vs` assets are served from `node_modules/monaco-editor` — ensure they're present post-install.

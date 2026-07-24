@@ -104,3 +104,24 @@ export async function getSessionUser(req: Request): Promise<SessionUser | null> 
     teamIds: getTeamIds(user.id),
   };
 }
+
+/** P5 Gate D (plans/platform.md §6): the scheduler (lib/run-queue.ts) has no incoming Request to
+ *  resolve a session from — a queued run may start long after the HTTP request that enqueued it
+ *  returned. This rebuilds the SAME SessionUser/ScopedUser shape getSessionUser() does, straight
+ *  from the `triggeredBy` user id stored on the `run` row, by querying better-auth's own `user`
+ *  table directly over the shared sqlite handle (same pattern as pages/admin-api.ts's
+ *  resolveActorEmails — that table isn't in our Drizzle schema). Returns null if the user has
+ *  since been deleted; callers (buildRunConfig) already treat a null user as "no DB config/cred
+ *  handoff" (demo-mode-shaped no-op), which is the right degrade here too. */
+export function resolveScopedUser(userId: string): SessionUser | null {
+  const row = sqlite
+    .query("SELECT id, email, role FROM user WHERE id = ?")
+    .get(userId) as { id: string; email: string; role: string | null } | null;
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    isSuperadmin: row.role === SUPERADMIN_ROLE,
+    teamIds: getTeamIds(row.id),
+  };
+}

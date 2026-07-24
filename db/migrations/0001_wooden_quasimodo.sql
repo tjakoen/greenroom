@@ -1,0 +1,1 @@
+ALTER TABLE `credential` ADD `role` text;

@@ -56,6 +56,7 @@ function toApi(row: CredentialRow) {
     label: row.label,
     username: row.username,
     envId: row.envId,
+    role: row.role,
     visibility: row.visibility,
     teamId: row.teamId,
     ownerId: row.ownerId,
@@ -83,11 +84,15 @@ async function createAccount(ctx: ApiCtx): Promise<Response> {
     body?.visibility === "private" || body?.visibility === "team" ? body.visibility : "company";
   const teamId: string | null = visibility === "team" && body?.teamId ? String(body.teamId) : null;
   const envId: string | null = body?.envId ? String(body.envId) : null;
+  // P5 Gate C: the (env, role) pair a per-run handoff (lib/run-config.ts) builds
+  // `<ENV>_<ROLE>_USERNAME/PASSWORD` child env vars from — NOT the free-text `label`. Optional:
+  // an account with no role stays "unknown/shared" and is never handed off to a run.
+  const role: string | null = body?.role ? String(body.role).trim() : null;
 
   const secretEnc = await encryptSecret(password);
   const [row] = await db
     .insert(credential)
-    .values({ label, username, envId, teamId, ownerId: user.id, visibility, secretEnc })
+    .values({ label, username, envId, role, teamId, ownerId: user.id, visibility, secretEnc })
     .returning();
 
   await writeAudit({ actorId: user.id, action: "create", entity: "credential", entityId: row.id, after: row });
@@ -116,13 +121,15 @@ async function updateAccount(ctx: ApiCtx): Promise<Response> {
     body?.teamId !== undefined ? (body.teamId ? String(body.teamId) : null) : existing.teamId;
   const envId: string | null =
     body?.envId !== undefined ? (body.envId ? String(body.envId) : null) : existing.envId;
+  const role: string | null =
+    body?.role !== undefined ? (body.role ? String(body.role).trim() : null) : existing.role;
   // Leave secretEnc unchanged unless a new password was actually typed in — an empty/omitted
   // password field must never blank out (or re-encrypt garbage over) a saved one.
   const secretEnc = body?.password ? await encryptSecret(String(body.password)) : existing.secretEnc;
 
   const [row] = await db
     .update(credential)
-    .set({ label, username, envId, teamId, visibility, secretEnc })
+    .set({ label, username, envId, role, teamId, visibility, secretEnc })
     .where(eq(credential.id, id))
     .returning();
 

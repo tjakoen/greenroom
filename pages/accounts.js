@@ -94,13 +94,15 @@
         <input class="field__input" type="password" data-acctpass="${esc(a.id)}" placeholder="•••••• (saved)"></label>
       <label class="field" data-size="sm"><span class="field__label">Environment</span>
         <select class="field__input" data-acctenv="${esc(a.id)}">${envOptionsHtml(a.envId || '')}</select></label>
+      <label class="field" data-size="sm"><span class="field__label">Role</span>
+        <input class="field__input" data-acctrole="${esc(a.id)}" value="${esc(a.role || '')}" placeholder="admin"></label>
       <label class="field" data-size="sm"><span class="field__label">Visibility</span>
         <select class="field__input" data-acctvis="${esc(a.id)}">
           <option value="company" ${a.visibility === 'company' ? 'selected' : ''}>Company (everyone)</option>
           <option value="team" ${a.visibility === 'team' ? 'selected' : ''}>Team</option>
           <option value="private" ${a.visibility === 'private' ? 'selected' : ''}>Private (only me)</option>
         </select></label>
-      <p class="gr-card-meta">Currently: ${esc(envName)}</p>
+      <p class="gr-card-meta">Currently: ${esc(envName)}${a.role ? ` &middot; runs as: ${esc(a.role)}` : ''}</p>
       <button class="btn" data-size="sm" data-acctsave="${esc(a.id)}" style="margin-top:var(--space-2)">Save</button>
     </div>`;
     }).join('');
@@ -110,8 +112,9 @@
       const username = document.querySelector(`[data-acctuser="${cssEsc(id)}"]`).value.trim();
       const password = document.querySelector(`[data-acctpass="${cssEsc(id)}"]`).value;
       const envId = document.querySelector(`[data-acctenv="${cssEsc(id)}"]`).value;
+      const role = document.querySelector(`[data-acctrole="${cssEsc(id)}"]`).value.trim();
       const visibility = document.querySelector(`[data-acctvis="${cssEsc(id)}"]`).value;
-      const patch = { username, envId, visibility };
+      const patch = { username, envId, role, visibility };
       if (password) patch.password = password; // omit entirely — an empty field must never overwrite a saved one
       updateAccount(id, patch);
     }));
@@ -122,9 +125,10 @@
     }));
   }
 
-  async function addAccount(label, username, password, envId, visibility, teamId) {
+  async function addAccount(label, username, password, envId, role, visibility, teamId) {
     const body = { label, username, password, visibility };
     if (envId) body.envId = envId;
+    if (role) body.role = role;
     if (visibility === 'team' && teamId) body.teamId = teamId;
     const r = await api('/api/accounts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
@@ -164,12 +168,14 @@
       const password = $('newAccountPassword').value;
       if (!label || !username || !password) return toast('Enter a label, username, and password.');
       const envId = $('newAccountEnv').value;
+      const role = $('newAccountRole').value.trim();
       const visibility = $('newAccountVisibility').value;
       const teamId = $('newAccountTeamId').value.trim();
-      addAccount(label, username, password, envId, visibility, teamId);
+      addAccount(label, username, password, envId, role, visibility, teamId);
       $('newAccountLabel').value = '';
       $('newAccountUsername').value = '';
       $('newAccountPassword').value = '';
+      $('newAccountRole').value = '';
       $('newAccountTeamId').value = '';
     });
 

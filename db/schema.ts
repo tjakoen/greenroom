@@ -74,6 +74,13 @@ export const credential = sqliteTable("credential", {
   visibility: text("visibility").$type<Visibility>().notNull().default("company"),
   username: text("username").notNull(),
   secretEnc: text("secret_enc").notNull(),
+  // P5 Gate C (plans/platform.md §6): the role a per-run DB→child handoff builds
+  // `<ENV>_<ROLE>_USERNAME/PASSWORD` var names from (lib/run-config.ts's buildRunConfig) — NOT
+  // derived from `label` (which was only ever a display string, e.g. the importer's
+  // `<role>@<env>` / `<role> (shared)` convention). Nullable: existing pre-P5 rows have
+  // role:null and are treated as unknown/shared (no env vars are emitted for them) until a
+  // superadmin/owner fills it in via the Accounts UI.
+  role: text("role"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -132,17 +139,24 @@ export const testVersion = sqliteTable("test_version", {
     .$defaultFn(() => new Date()),
 });
 
+// P5 Gate D (plans/platform.md §6): `run` is now a QUEUE table, not just a history record — a row
+// exists from the moment a run is enqueued (status:'queued', queuedAt set, startedAt/artifactDir
+// still null) through it actually starting (status:'running', startedAt set) to it finishing
+// (status one of passed/failed/stopped/error, finishedAt + artifactDir set). `queuedAt` is
+// nullable because rows imported by scripts/import-flatfiles.ts (pre-queue history) never queued —
+// they're inserted already-finished with startedAt set directly. `startedAt`/`artifactDir` lost
+// their NOT NULL + default for the same reason: a queued-but-not-yet-running row has neither yet.
 export const run = sqliteTable("run", {
   id: text("id").primaryKey().$defaultFn(id),
   envLabel: text("env_label").notNull(),
+  // "queued" | "running" | "passed" | "failed" | "stopped" | "error" (lib/run-queue.ts).
   status: text("status").notNull(),
-  startedAt: integer("started_at", { mode: "timestamp_ms" })
-    .notNull()
-    .$defaultFn(() => new Date()),
+  queuedAt: integer("queued_at", { mode: "timestamp_ms" }),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
   triggeredBy: text("triggered_by").notNull(),
   scope: text("scope", { mode: "json" }).$type<RunScope>(),
-  artifactDir: text("artifact_dir").notNull(),
+  artifactDir: text("artifact_dir"),
 });
 
 export const runResult = sqliteTable("run_result", {

@@ -8,7 +8,6 @@
     "postinstall": "playwright install chromium",
     "start": "bun server.ts",
     "demo": "GREENROOM_DEMO=1 bun server.ts",
-    "start:legacy": "bun interface/server.js",
     "dev": "bun --hot server.ts",
     "menu": "bash run.sh",
     "record": "bash record.sh",

@@ -21,7 +21,7 @@ grep -nE '(^|/)\.env($|\s)' .gitignore || echo "MISSING: .env not git-ignored"
 # no real-looking passwords hardcoded in tests/config — expect zero hits
 # (globs quoted so zsh doesn't abort on no-match; excludes CSS selectors like '#password',
 #  the data.password() generator ref, and saucedemo's intentionally-public demo password)
-grep -rnE "password\s*[:=]\s*['\"][^'\"]{3,}" tests config interface --include='*.ts' --include='*.js' | grep -viE "REPLACE_ME|getUser|placeholder|Selector|'#password'|data\.password|secret_sauce"
+grep -rnE "password\s*[:=]\s*['\"][^'\"]{3,}" tests config lib pages --include='*.ts' --include='*.js' | grep -viE "REPLACE_ME|getUser|placeholder|Selector|'#password'|data\.password|secret_sauce"
 ```
 
 Pass: `.env` is ignored, `.env.example` exists with only blank/placeholder values, zero
@@ -38,9 +38,9 @@ grep -nE 'config/urls\.json' .gitignore || echo "MISSING: config/urls.json not g
 # the committed example must not contain a real-looking host — expect only the
 # safe public demo hosts (saucedemo powers the shipped @example specs)
 grep -oE "https?://[a-z0-9.-]+" config/urls.example.json | grep -viE "example\.com|saucedemo\.com" || echo "OK: only safe public hosts"
-# no hardcoded hosts in tests/interface — expect zero (tests use relative paths;
+# no hardcoded hosts in tests/lib/pages — expect zero (tests use relative paths;
 # the shipped @example specs use safe PUBLIC test sites by design, hence the allowlist)
-grep -rnE "https?://[a-z0-9.-]+\.[a-z]{2,}" tests interface config/environments.ts --include='*.ts' --include='*.js' | grep -viE "example\.com|localhost|playwright\.dev|nodejs\.org|code\.visualstudio|saucedemo\.com|wikipedia\.org|the-internet\.herokuapp\.com"
+grep -rnE "https?://[a-z0-9.-]+\.[a-z]{2,}" tests lib pages config/environments.ts --include='*.ts' --include='*.js' | grep -viE "example\.com|localhost|playwright\.dev|nodejs\.org|code\.visualstudio|saucedemo\.com|wikipedia\.org|the-internet\.herokuapp\.com"
 ```
 
 Pass: `urls.json` is ignored, the committed example/config hosts are only safe public demo
@@ -64,8 +64,8 @@ routes/selectors from any specific app).
 ## 4. Typecheck is green
 
 ```bash
-npm run check          # the real entry: tsc --noEmit -p tsconfig.next.json (server.ts + lib/ + pages/)
-npm run check:legacy   # the frozen SPA: plain tsc --noEmit
+npm run check          # the composition root: tsc --noEmit -p tsconfig.next.json (server.ts + lib/ + pages/)
+npm run check:legacy   # tests/ specs + root config files: plain tsc --noEmit
 ```
 
 Pass: both exit 0, no errors.
@@ -73,10 +73,8 @@ Pass: both exit 0, no errors.
 ## 5. The app still boots
 
 ```bash
-# start the real entry (bun) on a scratch port, hit the state endpoint, stop — expect JSON with "status"
+# start the app (bun) on a scratch port, hit the state endpoint, stop — expect JSON with "status"
 PORT=4899 bun server.ts & sleep 2; curl -s http://localhost:4899/api/state; echo; pkill -f "bun server.ts"
-# legacy frozen SPA still boots on node — optional sanity check
-# PORT=4899 node interface/server.js & sleep 1; curl -s http://localhost:4899/api/state; echo; pkill -f "node interface/server.js"
 ```
 
 Pass: returns JSON including `"status"` and the environment list.
@@ -102,8 +100,8 @@ per-environment subfolders (only `helpers/`).
 ## 7. Docs synced
 
 The sync table in [CLAUDE.md](CLAUDE.md) is the contract. Spot-check the high-drift rows:
-`.env.example` roles line up with what the Logins UI discovers; the interface endpoints in
-`interface/server.js` all have UI in `interface/index.html`; README's "What gets captured"
+`.env.example` roles line up with what the Logins UI discovers; every `/api/*` endpoint in
+`server.ts` has UI in its matching `pages/*-page.ts` + `pages/*.js`; README's "What gets captured"
 matches `playwright.config.ts` + `tests/helpers/fixtures.ts`.
 
 ```bash

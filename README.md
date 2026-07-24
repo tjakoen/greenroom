@@ -175,7 +175,7 @@ that keeps the heavy artifacts only when a test fails.
 
 | Folder | What it's for |
 |--------|---------------|
-| `interface/` | The web page you run tests from |
+| `server.ts` + `pages/` | The web page you run tests from |
 | `runs/` | Archived results of past runs (local only) |
 | `tests/` | Your tests (`*.spec.ts`). Every test runs against whichever environment you pick |
 | `tests/helpers/` | Reusable pieces (e.g. `login`) |

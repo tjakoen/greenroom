@@ -251,7 +251,7 @@ canWrite(user, r) = user.isSuperadmin || r.ownerId === user.id
   the file write is scoped to `tests/` via the existing `validTestFile` traversal guard.
 - "Run this" from the editor enqueues a run of just that spec.
 
-**Built so far (ahead of p6-cutover — the editor is a new GRAIN route, touches no `interface/`):**
+**Built so far (the editor is a GRAIN route; p6-cutover has since landed):**
 - **P4-0 — grain `code-editor` organism** (`components/organisms/code-editor/`, CSS + catalog `.md`
   + `.ai.md`). Monaco-free chrome by construction (grain ships no JS bundler): frame + toolbar +
   `.code-editor__mount` slot the consumer injects the engine into + `data-state` status strip +
@@ -394,13 +394,10 @@ the Editor page only, so the rest of the app stays light.
 
 ## 9. Relationship to the in-progress BREAD migration (`PLAN.md`)
 
-- The BREAD migration (P1–P6) is landing the GRAIN shell + real routes; P6 (cutover, delete
-  `interface/`) is **not done**. This platform plan assumes the **GRAIN stack** (it builds new
-  pages as `pages/*` + `server.ts` routes), so:
-  - **Do P6 cutover first** — this plan's frontmatter `depends: [p6-cutover]` gates the board on it.
-  - Exception that doesn't violate the gate: P0 spikes and P1's new modules (`db`, `auth`, `scope`)
-    touch neither the frozen SPA nor existing pages, so that work may start while cutover is in
-    flight. No platform **pages** before cutover.
+- The BREAD migration (P1–P6) landed the GRAIN shell + real routes; P6 (cutover, delete
+  `interface/`) is **done** — `interface/` is gone, `/` now renders the Run page. This platform
+  plan assumes the **GRAIN stack** (it builds new pages as `pages/*` + `server.ts` routes); the
+  `depends: [p6-cutover]` gate in this plan's frontmatter is satisfied.
 - After this plan lands, `PLAN.md`'s "local-only / zero-dep / loopback" invariants are superseded by
   §0 here; update both `PLAN.md` and `CLAUDE.md` in the same change that ships Phase 1.
 

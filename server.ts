@@ -1,17 +1,13 @@
 // greenroom/server.ts — the BREAD composition root: the ONE place BATCH + GRAIN + MILL + PROOF
 // and greenroom's own domain meet, mirroring tjakoen.github.io/server.ts.
 //
-// STATUS: Phase 2 (PLAN.md §4, P2) — GRAIN shell + Guide + Settings. P1 ported the whole domain
-// of interface/server.js into lib/*.ts and wired every /api/* route, the run-output SSE
-// (lib/run-stream.ts), byte-preserving binary/Range static for report/runs/images/zips
-// (lib/binary.ts), the local-only security guards (lib/guard.ts), PROOF /plans and MILL
-// /guide,/context (both with a placeholder chrome). P2 replaces that placeholder with a real
-// GRAIN app-shell page (grainPage below), serves GRAIN's styles/scripts/component-CSS/catalog,
-// and adds /settings — server-rendered grain forms over the UNCHANGED /api/{envs,roles,creds,
-// groups} endpoints. P3 adds /tests the same way, over the unchanged tests-lib.ts endpoints,
-// using the new grain chip-group + b-select components. The old interface/ SPA at "/" (and its
-// hash routes) is kept byte-identical until cutover (P6). Frontend rebuild in GRAIN continues
-// P4–P5 (Run/History pages).
+// STATUS: P6 cutover complete (PLAN.md §4) — the whole BREAD → GRAIN migration is done. Every
+// human route is a real GRAIN page (grainPage below): /run (also served at "/"), /tests,
+// /editor, /history, /bug, /settings, /environments, /accounts, /admin, plus PROOF /plans and
+// MILL /guide,/context. The old interface/ SPA (Node http server + hand-rolled app.js/index.html/
+// styles.css) that P1–P5 ported piece by piece into lib/*.ts + pages/*.ts and kept mounted at "/"
+// as a byte-identical fallback has been deleted; its endpoints live on unchanged below every
+// GRAIN page (same request/response shapes the SPA used, so nothing downstream had to change).
 import { join, basename, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -65,7 +61,6 @@ import { editorApi } from "./pages/editor-api.ts";
 import { editorBody } from "./pages/editor-page.ts";
 
 const HERE = import.meta.dir;
-const INTERFACE = join(HERE, "interface");
 const RUNS_DIR = existsSync(join(ROOT, "demo", "runs")) && Bun.env.GREENROOM_DEMO === "1"
   ? join(ROOT, "demo", "runs")
   : join(ROOT, "runs");
@@ -108,9 +103,8 @@ async function serveVs(req: Request, rel: string): Promise<Response> {
   return serveFileRanged(req, abs, VS_MIME[ext]);
 }
 
-// The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. History/
-// Report a bug still point into the frozen old SPA (hash routes) — their own grain page lands
-// P5; User guide/Plans/Catalog/Settings/Tests/Run wear the new shell today.
+// The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. Every
+// destination below is a real GRAIN page as of the P6 cutover.
 const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
   { key: "run", label: "Run", href: "/run", icon: "loop" },
   { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
@@ -125,8 +119,9 @@ const NAV: Array<{ key: string; label: string; href: string; icon: string; foote
   { key: "admin", label: "Admin", href: "/admin", icon: "settings", footer: true },
   { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true },
 ];
-// Only the real, single-page destinations belong in the catalog's page-nav / a component search
-// index (hash routes into the frozen SPA aren't pages of THIS shell yet).
+// Every NAV destination is a real page as of P6 (no hash routes left to filter out) — kept as a
+// filter anyway so a future non-page NAV entry (an external link, say) can't leak into the
+// catalog's page-nav / component search index.
 const SHELL_PAGE_HREFS = NAV.filter((n) => !n.href.includes("#")).map((n) => n.href);
 
 const STYLESHEETS = [
@@ -155,9 +150,8 @@ function railNav(active?: string): string {
   return `${main}\n    <div class="side-rail__spacer"></div>\n    ${footer}`;
 }
 
-// The GRAIN app-shell page wrapper — replaces P1's minimalPage for every new human route
-// (PROOF /plans, MILL /guide + /context, and /settings). The old SPA at "/" is untouched (it
-// ships its own <head>/chrome from interface/index.html, never this function).
+// The GRAIN app-shell page wrapper — used by every human route, including "/" (P6: "/" now
+// renders the Run page through this same function, same as "/run").
 //   - theme-boot.js is render-blocking in <head>, BEFORE the stylesheets (no FOUC — mirrors
 //     saved data-color-scheme/data-theme onto <html> before first paint).
 //   - the title bar's `.window-bar__search` is the ⌘K anchor cmdk.js measures + opens from.
@@ -290,9 +284,10 @@ async function handle(req: Request): Promise<Response> {
 
   // ---- session gate (P1 Gate 2): every route below this line requires a session EXCEPT this
   // allow-list — /api/auth/* (already handled above), the /login page + its client module, and
-  // every static/shell asset (the rail chrome + the legacy SPA at "/" must stay reachable so the
-  // browser can even render the /login page). Demo mode is read-only + public — skip the gate
-  // entirely so `npm run demo` keeps working with no accounts. ----
+  // every static/shell asset (the rail chrome the /login page itself needs to render). Demo mode
+  // is read-only + public — skip the gate entirely so `npm run demo` keeps working with no
+  // accounts. P6: "/" is a normal gated page like any other (it renders the Run page) — it is
+  // deliberately NOT in this allow-list, so an unauthenticated "/" 302s to /login below. ----
   // Resolved once past the gate (non-null for every gated route in non-demo mode); handed to the
   // P2 scoped API handlers below. Null in demo mode (gate skipped) — those handlers 401 on it.
   let user: Awaited<ReturnType<typeof getSessionUser>> = null;
@@ -300,8 +295,7 @@ async function handle(req: Request): Promise<Response> {
     const gateAllowed =
       p === "/login" || p === "/login.js" ||
       p.startsWith("/styles/") || p.startsWith("/scripts/") || p.startsWith("/assets/") || p.startsWith("/fonts/") || p.startsWith("/vs/") ||
-      p === "/components.css" || p === "/greenroom.css" || p.startsWith("/favicon") ||
-      p === "/" || p === "/index.html" || p === "/app.js" || p === "/styles.css";
+      p === "/components.css" || p === "/greenroom.css" || p.startsWith("/favicon");
     if (!gateAllowed) {
       user = await getSessionUser(req);
       if (!user) {
@@ -330,10 +324,6 @@ async function handle(req: Request): Promise<Response> {
   if (fromProof) return fromProof;
   const fromMill = await millRoutes(millPath);
   if (fromMill) return fromMill;
-
-  // ---- the old SPA + its assets (frozen in P1; GRAIN pages replace them P2-P6) ----
-  if (p === "/" || p === "/index.html") return serveStatic(join(INTERFACE, "index.html"));
-  if (p === "/app.js" || p === "/styles.css") return serveStatic(join(INTERFACE, p.slice(1)));
 
   // ---- GRAIN shell assets (P2): styles/scripts/component-CSS/icon sprite + the catalog ----
   const htmlHeaders = { "Content-Type": "text/html; charset=utf-8" };
@@ -388,11 +378,11 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/editor") return new Response(grainPage("Editor", editorBody(), { active: "editor" }), { headers: htmlHeaders });
   if (p === "/editor.js") return serveStatic(join(HERE, "pages", "editor.js"));
 
-  // ---- Run (P4): server-rendered grain chip-group/stat-tile/b-meter/status-list over the
-  // unchanged /api/{run,stop,stream,state,results,tests,roles,groups,creds} endpoints below —
-  // run.js (a thin client module) sends the identical /api/run body and consumes the identical
-  // /api/stream events interface/app.js does today. ----
-  if (p === "/run") return new Response(grainPage("Run", runBody(), { active: "run" }), { headers: htmlHeaders });
+  // ---- Run (P4; also "/" as of the P6 cutover): server-rendered grain chip-group/stat-tile/
+  // b-meter/status-list over the /api/{run,stop,stream,state,results,tests,roles,groups,creds}
+  // endpoints below — run.js (a thin client module) sends the /api/run body and consumes the
+  // /api/stream events. ----
+  if (p === "/run" || p === "/") return new Response(grainPage("Run", runBody(), { active: "run" }), { headers: htmlHeaders });
   if (p === "/run.js") return serveStatic(join(HERE, "pages", "run.js"));
 
   // ---- History (P5): server-rendered grain rows over the unchanged /api/{runs,pdf-data}

@@ -28,6 +28,24 @@ const DEV_SECRET_FALLBACK = "greenroom-dev-only-secret-not-for-prod";
 // that makes isSuperadmin true (getSessionUser, bottom of this file).
 const SUPERADMIN_ROLE = "admin";
 
+// ---- deploy security (plans/platform.md §10 / DEPLOY.md) ----
+const BASE_URL = process.env.BETTER_AUTH_URL ?? "http://localhost:4321";
+// Cookies are marked Secure only when we're actually served over https (a deployed instance
+// behind a TLS proxy sets BETTER_AUTH_URL=https://…). Local http dev keeps them non-Secure so
+// the session cookie is still sent. sameSite=lax + httpOnly are better-auth defaults.
+const USE_SECURE_COOKIES = BASE_URL.startsWith("https://");
+// CSRF / redirect allowlist: better-auth validates Origin + SSO callbacks against these. The
+// deployment host(s) (ALLOWED_HOSTS, shared with lib/guard.ts) get an https origin each; the
+// base URL + loopback stay for local dev. Deduped.
+const TRUSTED_ORIGINS = Array.from(new Set([
+  BASE_URL,
+  "http://localhost:4321",
+  "http://127.0.0.1:4321",
+  ...String(process.env.ALLOWED_HOSTS || "")
+    .split(",").map((s) => s.trim().replace(/^https?:\/\//, "").replace(/\/$/, "")).filter(Boolean)
+    .map((h) => `https://${h}`),
+]));
+
 export const auth = betterAuth({
   database: sqlite,
   emailAndPassword: {
@@ -68,7 +86,21 @@ export const auth = betterAuth({
     sso(),
   ],
   secret: process.env.BETTER_AUTH_SECRET ?? DEV_SECRET_FALLBACK,
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:4321",
+  baseURL: BASE_URL,
+  // Deploy security (DEPLOY.md). trustedOrigins gates CSRF + SSO redirects; secure cookies over
+  // https; rate limit blunts credential brute-force. In-memory limiter is fine for the
+  // single-server model (plans/platform.md §6); a multi-instance deploy would need shared storage.
+  trustedOrigins: TRUSTED_ORIGINS,
+  advanced: { useSecureCookies: USE_SECURE_COOKIES },
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 120,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 10 },
+      "/sign-up/email": { window: 60, max: 10 },
+    },
+  },
 });
 
 /** Creates better-auth's own tables (user/session/account/verification + plugin tables) against

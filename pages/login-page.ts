@@ -24,10 +24,14 @@ export function loginBody(): string {
   <div class="login-page">
     <section class="card login-card" data-pad="lg">
       <div class="login-card__brand"><span>Greenroom</span></div>
-      <h1 class="masthead" style="margin-top:0">Sign in</h1>
-      <p class="lede">Use your Greenroom account to continue.</p>
+      <h1 class="masthead" style="margin-top:0" id="loginHeading">Sign in</h1>
+      <p class="lede" id="loginLede">Use your Greenroom account to continue.</p>
       <div id="loginError" class="callout" data-status="danger" hidden></div>
       <form id="loginForm" class="login-form">
+        <label class="field" id="loginNameField" hidden>
+          <span class="field__label">Name</span>
+          <input class="field__input" id="loginName" name="name" type="text" autocomplete="name">
+        </label>
         <label class="field">
           <span class="field__label">Email</span>
           <input class="field__input" id="loginEmail" name="email" type="email" autocomplete="username" required>
@@ -38,6 +42,7 @@ export function loginBody(): string {
         </label>
         <button class="btn" data-variant="primary" type="submit" id="loginSubmit">Sign in</button>
       </form>
+      <button class="btn" data-variant="ghost" type="button" id="loginToggle" style="margin-top:var(--space-2)">New here? Create an account</button>
       <div class="login-card__divider"><span>or</span></div>
       <button class="btn" type="button" disabled title="Coming in a later phase">Sign in with Microsoft</button>
     </section>

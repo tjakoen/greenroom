@@ -5,13 +5,36 @@ no accounts needed in demo). The platform layer (accounts, teams, scoping, the r
 see [plans/platform.md](plans/platform.md)) lets one company run **one shared instance** many
 people use at once. This file is the deploy runbook.
 
-> **Security status — read first.** The platform is **deploy-capable, not yet
-> security-reviewed for public exposure.** The defaults keep it locked to loopback; deployment
-> is opt-in via the env vars below. Before exposing it to real users you MUST (a) put it behind
-> a TLS-terminating reverse proxy on a private/company network, (b) set the secrets below, and
-> (c) have someone do the deploy security pass tracked in [plans/platform.md](plans/platform.md)
-> §10 (session/CSRF behind a proxy, trusted-proxy headers, rate limiting). Do not put it on the
-> public internet without that pass.
+> **Security status — read first.** The platform is **hardened for internal deployment behind a
+> trusted reverse proxy, not audited for direct public-internet exposure.** Defaults stay
+> loopback-locked; deployment is opt-in via the env vars below. Keep it on a private/company
+> network behind the proxy. See the security-review section below for what's covered vs residual.
+
+## Security review
+
+What the platform already enforces (all opt-in via env, defaults unchanged for local):
+- **Auth on every route** — better-auth sessions; unauthenticated page → 302 `/login`, API → 401.
+  Cookies are `httpOnly` + `sameSite=lax`, and **Secure** when `BETTER_AUTH_URL` is `https://`.
+- **Host + CSRF allowlist** — `lib/guard.ts` serves only `ALLOWED_HOSTS` (+ loopback) and rejects
+  cross-origin writes; better-auth `trustedOrigins` gates CSRF + SSO redirects to the same hosts.
+- **Rate limiting** — 120 req/min global, 10/min on `sign-in`/`sign-up` (credential brute-force).
+  Behind a proxy the app resolves the client IP from `x-forwarded-for` (only when `ALLOWED_HOSTS`
+  is set) so the limit is per-client, not one shared bucket. **This is only safe if the proxy
+  OVERWRITES `X-Forwarded-For` with the real client IP** (see the nginx config below) — an
+  append-style proxy header is client-spoofable.
+- **Secrets at rest** — test-target credentials AES-256-GCM encrypted (`SECRET_KEY`); Greenroom
+  account passwords hashed by better-auth; neither returned to the client.
+- **Accountability** — every write goes through the append-only audit log (actor + before/after,
+  secrets redacted).
+
+Residual risk / must-do before exposure (do NOT skip):
+- **Trusted proxy is assumed.** The app trusts `Host` + `X-Forwarded-For` from the proxy. Only run
+  it behind a proxy you control that sets those correctly; never bind `0.0.0.0` without the proxy.
+- **In-memory rate limiter** — fine for the single-server model (plans/platform.md §6). A
+  multi-instance deploy needs a shared store, or each instance limits independently.
+- **No independent security audit yet** — pen-test / review before any broader exposure.
+- **Company-open scoping by design** — everyone can read `company`-visibility resources; scoping is
+  for organization + accountability, not a hard wall between teammates (plans/platform.md §0).
 
 ## Prerequisites
 
@@ -55,7 +78,11 @@ server {
   location / {
     proxy_pass http://127.0.0.1:4321;
     proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # OVERWRITE (not $proxy_add_x_forwarded_for, which appends the client-supplied value):
+    # the app trusts x-forwarded-for for rate-limit client-IP resolution when ALLOWED_HOSTS is
+    # set, so the proxy must set it to the REAL client IP only. Appending would let a client
+    # spoof a leftmost IP and evade the auth rate limit.
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_buffering off;   # the run dashboard streams Server-Sent Events
   }

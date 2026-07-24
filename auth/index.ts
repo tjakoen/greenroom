@@ -45,6 +45,15 @@ const TRUSTED_ORIGINS = Array.from(new Set([
     .split(",").map((s) => s.trim().replace(/^https?:\/\//, "").replace(/\/$/, "")).filter(Boolean)
     .map((h) => `https://${h}`),
 ]));
+// Client-IP resolution for rate limiting. When deployed (ALLOWED_HOSTS set), we're behind a
+// reverse proxy so the socket IP is the proxy's — better-auth would otherwise fall back to ONE
+// shared rate-limit bucket (its own warning), letting a single attacker rate-limit everyone.
+// Trust x-forwarded-for ONLY when deployed: the proxy MUST set it to the real client IP and
+// OVERWRITE any client-supplied value (nginx `proxy_set_header X-Forwarded-For $remote_addr` —
+// see DEPLOY.md), otherwise a client could spoof it to evade the limit. In local/direct mode we
+// leave it unset so the real socket IP is used and XFF can't be spoofed.
+const IS_DEPLOYED = !!process.env.ALLOWED_HOSTS;
+const IP_ADDRESS = IS_DEPLOYED ? { ipAddressHeaders: ["x-forwarded-for"] } : undefined;
 
 export const auth = betterAuth({
   database: sqlite,
@@ -91,7 +100,7 @@ export const auth = betterAuth({
   // https; rate limit blunts credential brute-force. In-memory limiter is fine for the
   // single-server model (plans/platform.md §6); a multi-instance deploy would need shared storage.
   trustedOrigins: TRUSTED_ORIGINS,
-  advanced: { useSecureCookies: USE_SECURE_COOKIES },
+  advanced: { useSecureCookies: USE_SECURE_COOKIES, ...(IP_ADDRESS ? { ipAddress: IP_ADDRESS } : {}) },
   rateLimit: {
     enabled: true,
     window: 60,

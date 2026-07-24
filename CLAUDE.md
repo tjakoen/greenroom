@@ -30,6 +30,17 @@ A committed `demo/` dir + `npm run demo` boot a read-only, zero-config populated
 a fresh clone; a small set of committed `@example` specs run against safe public sites out of
 the box.
 
+> **It is now ALSO a deployable multi-user platform.** The same codebase runs two ways: the
+> original **local single-user tool** (loopback, no accounts — unchanged, still the default), and
+> a **deployed instance** one company runs for many concurrent users behind a URL. The platform
+> layer adds real accounts + sessions (`better-auth`, free/open-source, self-hosted), teams +
+> per-resource `visibility` scoping (private/team/company) + superadmin, an embedded SQLite DB
+> (`bun:sqlite` + Drizzle — `data/greenroom.db`), a server-side **run queue** (concurrent Playwright
+> runs, per-run isolation), an in-browser test **editor**, and an append-only **audit log**. It
+> stays loopback-locked until you opt in via env (`HOST`/`ALLOWED_HOSTS`). Architecture +
+> phase history: **[plans/platform.md](plans/platform.md)**. Running a real deployment:
+> **[DEPLOY.md](DEPLOY.md)**. The non-negotiables below are annotated where the platform changed them.
+
 Tests are tagged/organised four ways, combined on the Tests page: **@tags** in the test
 title (read from the file, run-by-tag via `--grep`), **group/priority/owner/notes** metadata
 (app-managed sidecar `tests/tests-meta.json`, editable in-app), and **smart filters**
@@ -84,16 +95,23 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 - **No app source enters this repo.** Only derived context (routes, selectors) in
   `context/`. If you need a new fact about the app under test, add it to the context docs.
 - **No secrets committed.** Logins live only in `.env` (git-ignored). Never hardcode
-  credentials in a test — pull them via `getUser(role)` (reads `.env`).
+  credentials in a test — pull them via `getUser(role)` (reads `.env`). *Platform:* test-target
+  credentials also live **encrypted** (`credential.secretEnc`, AES-256-GCM via `lib/secret.ts`,
+  keyed by `SECRET_KEY`) in the DB; still never returned to the client, never committed. Greenroom
+  **account** passwords are hashed by better-auth. This non-negotiable is unchanged — only stronger.
 - **No real environment URLs committed.** `config/urls.json` is git-ignored (a user's real
   environments); only the generic `config/urls.example.json` is committed. Never hardcode an
   environment URL in a test — use relative paths.
 - **Tests live flat in `tests/`**, not in per-environment folders. Never reintroduce
   `tests/<env>/` coupling — scope by `@tag`/metadata instead.
-- **Keep dependencies at the floor.** The interface is zero-dependency plain Node on
-  purpose. Add a library only when it earns its place.
-- **User-first.** Anything a non-coder touches must work with no command typing and no
-  coding — via the VS Code tasks + the web app, not raw terminal commands.
+- **Keep dependencies at the floor** — *amended by the platform.* The test-runner **core** stays
+  minimal. The **platform layer** spends the budget deliberately on a small, audited set: `drizzle-orm`
+  (+ `drizzle-kit` dev) over embedded `bun:sqlite`, `better-auth` (+ `@better-auth/sso`), and
+  `monaco-editor` (lazy, editor page only). Each is justified in [plans/platform.md](plans/platform.md) §8.
+  Add nothing else without the same bar.
+- **User-first.** Anything a non-coder touches must work with no command typing and no coding.
+  *Local:* via the VS Code tasks + the web app. *Platform:* via **a URL** — no pull, no VS Code,
+  no terminal; a teammate signs in and uses it.
 - **Definition of done** (below) — not "it runs on my machine once."
 
 ## Keep it aligned — when you change X, update Y
@@ -180,12 +198,19 @@ the memory. Durable, repo-worthy rules belong *in this file*, not in memory.
 
 ## Working notes
 
-- **Local only.** Ships as a local app. Recording uses a real browser on the user's screen.
-- **VS Code is the primary entry point.** Users open the folder in VS Code and use the
-  `.vscode/` tasks (**🚀 Open Test App**, run/record/report) + the Testing panel. The web
-  app at `localhost:4321` is the main surface once started.
-- **Open source.** This is a generic starter — no data about any specific app under test
-  belongs in committed files (URLs, selectors, routes, credentials, org names). Keep
-  `context/` and `*.example` files generic; real values live in git-ignored `urls.json`/`.env`.
+- **Two runtime modes.** (1) **Local** — ships as a local app, loopback-only, no accounts; the
+  original mode, still the default. Recording uses a real browser on the user's screen (so recording
+  is local-only — a headless deploy can't open a codegen window). (2) **Deployed platform** — one
+  company runs one shared instance for many users; opt in via `HOST`/`ALLOWED_HOSTS` + the env in
+  [DEPLOY.md](DEPLOY.md). Both run from the same `bun server.ts`.
+- **VS Code is the primary entry point *for local use*.** Users open the folder in VS Code and use
+  the `.vscode/` tasks (**🚀 Open Test App**, run/record/report) + the Testing panel; the web app at
+  `localhost:4321` is the surface once started. On a **deployed** instance the entry point is just
+  the URL — no VS Code, no clone.
+- **Open source, stays generic.** Still a generic starter — no data about any specific app under
+  test, and no company/deployment specifics (company name, Entra tenant, host, `SECRET_KEY`), in
+  committed files. The platform is deployable by any company; a given company's instance is
+  configured entirely via git-ignored config + env + the DB (see [plans/platform.md](plans/platform.md) §0.5).
+  Keep `context/` and `*.example` files generic; real values live in git-ignored `urls.json`/`.env`/DB.
 - Run commands from the repo root.
 - Commit/push only when asked.

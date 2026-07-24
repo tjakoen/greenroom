@@ -23,7 +23,6 @@ import type { ContentSource } from "@tjakoen/mill/serve.ts";
 import { escapeHtml } from "@tjakoen/mill/core/engine.ts";
 import { createProofRoutes } from "@tjakoen/proof/routes.ts";
 import { createCatalog } from "@tjakoen/grain/catalog/catalog.ts";
-import { madeWith } from "@tjakoen/grain/scripts/made-with.js";
 
 import { guardRequest } from "./lib/guard.ts";
 import { serveFileRanged, safeResolve, mimeOf } from "./lib/binary.ts";
@@ -195,7 +194,7 @@ function grainPage(title: string, body: string, opts: { active?: string } = {}):
     <main class="app-shell__main">${body}</main>
     <footer class="app-shell__status status-bar">
       <span class="status-bar__spacer"></span>
-      ${madeWith({ inline: true })}
+      <span class="made-with" data-status-optional>built on GRAIN</span>
     </footer>
   </div>
   <div id="toast" class="gr-toast" role="status" aria-live="polite"></div>

@@ -15,6 +15,15 @@
 // setStatus (~120-134), the SSE wiring (~1322-1357) and reconcileResults/showLastRun
 // (~1442-1471). A failed row's "Report this" hands off to the migrated /bug page (P5) with the
 // test title as a ?title= query param (the multi-page replacement for the SPA's pendingShare).
+//
+// P5 Gate B (plans/platform.md §6): run state + its SSE moved from one global singleton to a
+// Map<runId, RunHandle> (lib/run-stream.ts) so a later gate can go concurrent. This page now gets
+// a `runId` back from POST /api/run and opens /api/stream?run=<runId> for that specific run's live
+// output instead of the old no-param compat stream — and reconciles via /api/results?run=<runId>
+// (not "latest") once it's done, so a second run started elsewhere while this page is open can
+// never get its results crossed with this one's. The no-param stream is still opened once on page
+// load (openStream() below, no runId) to show whatever's already in flight on load/reconnect —
+// exactly like the frozen SPA — then swapped for a per-run stream the moment THIS page starts one.
 (() => {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -49,6 +58,11 @@
   let groupsCache = []; // saved site groups (named env presets)
   let rolesCache = [];
   let running = false;
+  // Gate D: the run THIS page most recently started (its `run` row / RunHandle / archive-dir id,
+  // all the same value) — so Stop targets exactly that run, not "whatever's active" (there can be
+  // several, across users, once the queue admits more than one at once). null once it's finished.
+  let currentRunId = null;
+  let queuePollTimer = null;
 
   // Run-page environment selection is MULTI-select: pick one env (today's flow) or several to
   // run the same tests against all of them at once. Each selected env becomes a column in the
@@ -257,7 +271,38 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ envs, light: $('light').checked, files: files || undefined, grep: grep || undefined, role: runRole || undefined }),
     });
-    if (!res.ok) toast(res.error);
+    if (!res.ok) return toast(res.error);
+    // Gate D: /api/run now QUEUES the run — it may not start immediately if other runs (this
+    // page's or another user's) already fill the concurrency cap. `position` (0 = starting now)
+    // drives the "Queued — position N" readout below; a live position poll fills in while it
+    // waits. Gate B: subscribe to THIS run's own stream (instead of the page-load compat one) so
+    // its `line`s and eventual `done` can never be crossed with a different run's — this works
+    // even while still queued (the handle exists from the moment it was enqueued).
+    currentRunId = res.runId;
+    if (res.runId) {
+      openStream(res.runId);
+      if (res.position > 0) {
+        setStatus('queued', null, res.position);
+        startQueuePoll(res.runId);
+      }
+    }
+  }
+
+  // Gate D: while a run sits queued behind others, poll /api/queue for its live position (the
+  // stream itself has nothing to say until the run actually starts) — stops itself the moment the
+  // run's status moves off "queued" (either because it started, per the stream's own `state`
+  // event, or because it was stopped while still waiting).
+  function startQueuePoll(runId) {
+    stopQueuePoll();
+    queuePollTimer = setInterval(async () => {
+      const data = await api('/api/queue').catch(() => ({ queue: [] }));
+      const entry = (data.queue || []).find((q) => q.runId === runId);
+      if (!entry || entry.status !== 'queued') { stopQueuePoll(); return; }
+      setStatus('queued', null, entry.position);
+    }, 1500);
+  }
+  function stopQueuePoll() {
+    if (queuePollTimer) { clearInterval(queuePollTimer); queuePollTimer = null; }
   }
   const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -367,22 +412,38 @@
   // ------------------------------------------------------------------------------ run status
   // The monochrome status readout — text only, no hue'd pill/dot. While running it wears
   // data-commit="pending" (the shared grain control-lifecycle idiom) for the dashed edge.
-  function setStatus(status, env) {
-    running = status === 'running';
+  function setStatus(status, env, position) {
+    // Gate D: "queued" counts as active too (Run stays disabled, Stop stays enabled — a queued run
+    // can still be cancelled before it ever starts).
+    running = status === 'running' || status === 'queued';
     const el = $('runStatus');
-    el.textContent = { idle: 'Ready', running: 'Running ' + (env || '') + '…', passed: 'All passed', failed: 'Some failed', stopped: 'Stopped' }[status] || 'Ready';
+    const labels = {
+      idle: 'Ready',
+      queued: position ? `Queued — position ${position}` : 'Queued…',
+      running: 'Running ' + (env || '') + '…',
+      passed: 'All passed',
+      failed: 'Some failed',
+      stopped: 'Stopped',
+      error: 'Could not start',
+    };
+    el.textContent = labels[status] || 'Ready';
     if (running) el.setAttribute('data-commit', 'pending');
     else el.removeAttribute('data-commit');
     $('runBtn').disabled = running;
     const stopBtn = $('stopBtn');
     stopBtn.disabled = !running;
-    if (!running) stopBtn.textContent = 'Stop'; // revert any "Stopping…" label once the run has actually ended
+    if (!running) {
+      stopBtn.textContent = 'Stop'; // revert any "Stopping…" label once the run has actually ended
+      stopQueuePoll(); // no-op if it wasn't running — belt-and-suspenders against a stray timer
+    }
   }
 
   // Fold the authoritative per-(test, env) results back into the matrix once a run finishes
-  // (the live list parse can miss lines under load).
-  async function reconcileResults() {
-    const results = await api('/api/results?run=latest').catch(() => []);
+  // (the live list parse can miss lines under load). `run` is the runId this page's own stream was
+  // scoped to (Gate B) — falls back to "latest" for the no-runId compat stream (page load/reconnect
+  // showing a run this tab didn't itself trigger, or a recording's `done`, which has no run row).
+  async function reconcileResults(run) {
+    const results = await api('/api/results?run=' + encodeURIComponent(run || 'latest')).catch(() => []);
     const cols = new Set(matrixCols);
     for (const r of results) {
       const env = r.env || matrixCols[0] || '';
@@ -410,6 +471,57 @@
     renderChecklist();
   }
 
+  // ------------------------------------------------------------------------------ live stream
+  // Gate B: one EventSource at a time — `openStream(runId)` closes whatever was open before it and
+  // wires the SAME handlers (state/line/started/done) either to a specific run's own channel
+  // (`/api/stream?run=<runId>`, once this page has triggered a run and knows its id) or the no-param
+  // compat channel (page load — mirrors whatever's already active, exactly like the frozen SPA).
+  // Never both at once, so a run's `line`s are never delivered twice to this page.
+  let streamEvents = null;
+  function openStream(runId) {
+    if (streamEvents) streamEvents.close();
+    streamEvents = new EventSource(runId ? '/api/stream?run=' + encodeURIComponent(runId) : '/api/stream');
+    // the server sends one `state` event right when the connection opens (both on first load and
+    // on every auto-reconnect), then replays every buffered output line as its own `line` event;
+    // there is no client-side replay to add on top.
+    streamEvents.addEventListener('state', (e) => {
+      const st = JSON.parse(e.data);
+      $('output').textContent = '';
+      // Gate D: a run's own publicState carries no queue POSITION (that's queue-level bookkeeping,
+      // not part of the run itself) — while queued, startQueuePoll() already owns the "Queued —
+      // position N" text, so just keep Run/Stop reflecting "active" without stomping it with a
+      // bare "Queued…" every time this event replays (page load AND every reconnect).
+      if (st.status === 'queued') {
+        running = true;
+        $('runBtn').disabled = true;
+        $('stopBtn').disabled = false;
+      } else {
+        setStatus(st.status, st.env);
+      }
+      $('reportBtn').disabled = !st.reportExists;
+      if (st.status === 'running') {
+        matrix = new Map(); // synchronous — before any buffered `line` events are processed
+        matrixCols = (st.runEnvs && st.runEnvs.length) ? st.runEnvs : runEnvList();
+        selectedEnvs = new Set(matrixCols);
+        renderRunEnvPills();
+        fillChecklistTotals(matrixCols[0]); // async: adds placeholders for tests not yet reported
+      }
+    });
+    streamEvents.addEventListener('line', (e) => appendLine(JSON.parse(e.data).line));
+    streamEvents.addEventListener('started', (e) => {
+      const st = JSON.parse(e.data);
+      $('output').textContent = '';
+      setStatus(st.status, st.env);
+    });
+    streamEvents.addEventListener('done', (e) => {
+      const st = JSON.parse(e.data);
+      setStatus(st.status, st.env);
+      $('reportBtn').disabled = !st.reportExists;
+      reconcileResults(runId); // Gate B: this run's own id, not "latest" — see reconcileResults
+      populateRunScope(); // a recording may have added a new test/group/tag
+    });
+  }
+
   // -------------------------------------------------------------------------------- load/wire
   function init() {
     $('runEnvPills').addEventListener('change', (e) => {
@@ -423,11 +535,15 @@
     $('runBtn').addEventListener('click', () => startRun(resolveRunScope()));
     $('stopBtn').addEventListener('click', () => {
       // Immediate feedback — otherwise the button gives no sign anything happened until the
-      // process actually dies and the `done` event lands.
+      // process actually dies (or, while queued, until it's simply marked stopped) and the `done`
+      // event lands. Gate D: target THIS page's own run specifically — there can be several runs
+      // in flight (or queued) across users at once now, so "stop whatever's active" is no longer
+      // the right default once we have an id to be precise with.
       const btn = $('stopBtn');
       btn.disabled = true;
       btn.textContent = 'Stopping…';
-      fetch('/api/stop', { method: 'POST' });
+      const q = currentRunId ? ('?run=' + encodeURIComponent(currentRunId)) : '';
+      fetch('/api/stop' + q, { method: 'POST' });
     });
     $('reportBtn').addEventListener('click', () => window.open('/report/', '_blank'));
 
@@ -445,36 +561,10 @@
       populateRunScope();
       showLastRun();
 
-      // live stream — the server sends one `state` event right when the connection opens (both
-      // on first load and on every auto-reconnect), then replays every buffered output line as
-      // its own `line` event; there is no client-side replay to add on top.
-      const streamEvents = new EventSource('/api/stream');
-      streamEvents.addEventListener('state', (e) => {
-        const st = JSON.parse(e.data);
-        $('output').textContent = '';
-        setStatus(st.status, st.env);
-        $('reportBtn').disabled = !st.reportExists;
-        if (st.status === 'running') {
-          matrix = new Map(); // synchronous — before any buffered `line` events are processed
-          matrixCols = (st.runEnvs && st.runEnvs.length) ? st.runEnvs : runEnvList();
-          selectedEnvs = new Set(matrixCols);
-          renderRunEnvPills();
-          fillChecklistTotals(matrixCols[0]); // async: adds placeholders for tests not yet reported
-        }
-      });
-      streamEvents.addEventListener('line', (e) => appendLine(JSON.parse(e.data).line));
-      streamEvents.addEventListener('started', (e) => {
-        const st = JSON.parse(e.data);
-        $('output').textContent = '';
-        setStatus(st.status, st.env);
-      });
-      streamEvents.addEventListener('done', (e) => {
-        const st = JSON.parse(e.data);
-        setStatus(st.status, st.env);
-        $('reportBtn').disabled = !st.reportExists;
-        reconcileResults();
-        populateRunScope(); // a recording may have added a new test/group/tag
-      });
+      // Gate B: opens the no-param compat stream — mirrors whatever's already active on load/
+      // reconnect (a run started elsewhere, or a recording), exactly like the frozen SPA. The
+      // moment this page starts its OWN run, startRun() swaps this for a per-runId stream.
+      openStream();
     })();
   }
 

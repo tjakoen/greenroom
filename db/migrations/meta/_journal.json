@@ -8,6 +8,20 @@
       "when": 1784338545439,
       "tag": "0000_reflective_corsair",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784841370174,
+      "tag": "0001_wooden_quasimodo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784901858092,
+      "tag": "0002_nice_songbird",
+      "breakpoints": true
     }
   ]
 }

@@ -10,7 +10,7 @@ import { resolveLoginForm, baseURLof, DEFAULT_LOGIN_FORM, envNames } from "./env
 import { resolveCred } from "./creds.ts";
 import { loadRolesRaw } from "./roles.ts";
 import { parseTests, loadMeta, metaKey } from "./tests-lib.ts";
-import { state, pushOutput, broadcast, publicState } from "./run-stream.ts";
+import { recordingState, pushRecordingOutput, broadcastGlobal, publicState, getActiveRun } from "./run-stream.ts";
 import { ROOT, META_FILE, IS_DEMO, denyInDemo } from "./paths.ts";
 
 export interface RecordResult {
@@ -116,7 +116,11 @@ async function preAuth(env: string, role: string): Promise<{ ok: boolean; error?
 
 export async function startRecording(env: string, name: string, role?: string): Promise<RecordResult> {
   if (IS_DEMO) return denyInDemo;
-  if (state.proc || state.recording) return { ok: false, error: "A run is in progress — finish it first." };
+  // Gate B: recording is still exclusive with a real run — the run map replaced the shared
+  // singleton, so that check now needs its own lookup alongside recordingState's own guard.
+  if (recordingState.proc || recordingState.recording || getActiveRun()) {
+    return { ok: false, error: "A run is in progress — finish it first." };
+  }
   if (!envNames().includes(env)) return { ok: false, error: `Unknown environment "${env}".` };
   const roleName = role ? String(role).trim() : "";
   if (roleName && !loadRolesRaw()[roleName]) return { ok: false, error: `Unknown role "${roleName}".` };
@@ -125,13 +129,13 @@ export async function startRecording(env: string, name: string, role?: string): 
   const out = `tests/${safe}.spec.ts`;
   const url = baseURLof(env);
 
-  state.status = "running";
-  state.recording = true; // guards a second start during the async pre-auth window (before state.proc is set)
-  state.env = env;
-  state.envs = [env]; // don't leave the previous run's env list advertised while recording
-  state.lines = [];
-  broadcast("started", publicState());
-  const say = (line: string) => pushOutput(line);
+  recordingState.status = "running";
+  recordingState.recording = true; // guards a second start during the async pre-auth window (before recordingState.proc is set)
+  recordingState.env = env;
+  recordingState.envs = [env]; // don't leave the previous run's env list advertised while recording
+  recordingState.lines = [];
+  broadcastGlobal("started", publicState());
+  const say = (line: string) => pushRecordingOutput(line);
 
   // Pre-authenticate so the recorder opens already logged in — driven by the
   // env's login-form config + .env, so it's generic for any app.
@@ -139,14 +143,14 @@ export async function startRecording(env: string, name: string, role?: string): 
   if (roleName) {
     say(`Signing in as "${roleName}" so the recorder opens already logged in…`);
     const pre = await preAuth(env, roleName);
-    // state.status is read through a widening cast: stopRun() can flip it to "stopped" during the
+    // recordingState.status is read through a widening cast: stopRun() can flip it to "stopped" during the
     // awaited preAuth above, which TS's control-flow can't see (it still thinks it's "running").
-    if ((state.status as string) === "stopped") {
+    if ((recordingState.status as string) === "stopped") {
       // user cancelled during pre-auth
-      state.recording = false;
-      state.status = "idle";
+      recordingState.recording = false;
+      recordingState.status = "idle";
       say("Recording cancelled.");
-      broadcast("done", publicState());
+      broadcastGlobal("done", publicState());
       return { ok: true, out };
     }
     if (pre.ok) {
@@ -169,8 +173,8 @@ export async function startRecording(env: string, name: string, role?: string): 
     detached: process.platform !== "win32",
     env: { ...process.env, TEST_ENV: env },
   });
-  state.proc = proc;
-  state.recording = false;
+  recordingState.proc = proc;
+  recordingState.recording = false;
   let settled = false;
   const cleanupStorage = () => {
     if (storageFile) {
@@ -181,30 +185,30 @@ export async function startRecording(env: string, name: string, role?: string): 
       }
     }
   };
-  proc.stdout?.on("data", pushOutput);
-  proc.stderr?.on("data", pushOutput);
+  proc.stdout?.on("data", pushRecordingOutput);
+  proc.stderr?.on("data", pushRecordingOutput);
   proc.on("error", (err) => {
     if (settled) return;
     settled = true;
-    state.proc = null;
-    state.recording = false;
-    state.status = "idle";
+    recordingState.proc = null;
+    recordingState.recording = false;
+    recordingState.status = "idle";
     cleanupStorage();
-    pushOutput(`\nCouldn't open the recorder: ${err.message}\nIs Node/npx on your PATH? Try launching the app from a terminal.`);
-    broadcast("done", publicState());
+    pushRecordingOutput(`\nCouldn't open the recorder: ${err.message}\nIs Node/npx on your PATH? Try launching the app from a terminal.`);
+    broadcastGlobal("done", publicState());
   });
   proc.on("close", () => {
     if (settled) return;
     settled = true;
-    state.proc = null;
-    state.recording = false;
+    recordingState.proc = null;
+    recordingState.recording = false;
     cleanupStorage(); // the pre-auth session was only for the recorder — the saved spec logs in fresh via login()
     // If the user hit Stop, don't post-process a half-written spec — just cancel.
-    const aborted = state.status === "stopped";
-    state.status = "idle";
+    const aborted = recordingState.status === "stopped";
+    recordingState.status = "idle";
     if (aborted) {
-      pushOutput("\nRecording cancelled.");
-      broadcast("done", publicState());
+      pushRecordingOutput("\nRecording cancelled.");
+      broadcastGlobal("done", publicState());
       return;
     }
     // Always: strip the ephemeral pre-auth storageState block + relativize URLs.
@@ -212,14 +216,14 @@ export async function startRecording(env: string, name: string, role?: string): 
     if (roleName) {
       const injected = injectLoginIntoSpec(join(ROOT, out), roleName);
       setRecordedRole(out, roleName);
-      pushOutput(
+      pushRecordingOutput(
         injected
           ? `\nAdded automatic login as "${roleName}".`
           : `\nCouldn't auto-insert login — add \`await login('${roleName}')\` at the top by hand.`,
       );
     }
-    pushOutput(`\nSaved: ${out}\nRun it from the list above.`);
-    broadcast("done", publicState());
+    pushRecordingOutput(`\nSaved: ${out}\nRun it from the list above.`);
+    broadcastGlobal("done", publicState());
   });
   return { ok: true, out };
 }

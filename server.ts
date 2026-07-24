@@ -26,23 +26,24 @@ import { createCatalog } from "@tjakoen/grain/catalog/catalog.ts";
 
 import { guardRequest } from "./lib/guard.ts";
 import { serveFileRanged, safeResolve, mimeOf } from "./lib/binary.ts";
-import { ROOT, PORT, IS_DEMO, readFileMaybe } from "./lib/paths.ts";
+import { ROOT, PORT, IS_DEMO, readFileMaybe, denyInDemo } from "./lib/paths.ts";
 import { runAppMigrations } from "./db/index.ts";
 import { auth, runAuthMigrations, getSessionUser } from "./auth/index.ts";
 import { ensureDefaultOrg } from "./auth/bootstrap.ts";
-import { state, publicState, runStream } from "./lib/run-stream.ts";
+import { publicState, runStream, allRunHandles, recordingState } from "./lib/run-stream.ts";
 import {
   loadUrls, envNames, sanitizeLoginForm, saveEnv, saveSharedLogin, deleteEnv,
 } from "./lib/envs.ts";
 import { credRoles, saveCred, ENV_FILE } from "./lib/creds.ts";
-import { rolesWithStatus, saveRole, deleteRole } from "./lib/roles.ts";
+import { rolesWithStatus, saveRole, deleteRole, seedRoles } from "./lib/roles.ts";
 import { listGroups, saveGroup, deleteGroup } from "./lib/groups.ts";
 import {
   listTests, deleteTest, renameTest, saveMeta, saveTags, readResults,
   specFiles, recordedInputs, applyInputs,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
-import { startRun, stopRun, killProc } from "./lib/runner.ts";
+import { stopRun as stopLegacy, killProc } from "./lib/runner.ts";
+import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue } from "./lib/run-queue.ts";
 import { startRecording } from "./lib/recorder.ts";
 import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
 import { buildPdf } from "./lib/pdf.ts";
@@ -63,10 +64,17 @@ import { environmentsBody } from "./pages/environments-page.ts";
 
 const HERE = import.meta.dir;
 const INTERFACE = join(HERE, "interface");
-const REPORT_DIR = join(ROOT, "playwright-report");
 const RUNS_DIR = existsSync(join(ROOT, "demo", "runs")) && Bun.env.GREENROOM_DEMO === "1"
   ? join(ROOT, "demo", "runs")
   : join(ROOT, "runs");
+// Gate A (plans/platform.md §6): there's no more shared ROOT/playwright-report — each run writes
+// straight to its own runs/.live/<id> dir and gets renamed into RUNS_DIR on close (lib/runner.ts,
+// lib/records.ts). "/report" (the "open latest report" button) now serves out of the newest
+// finished run's own dir.
+function latestRunDir(): string | null {
+  const runs = listRuns();
+  return runs.length ? join(RUNS_DIR, runs[0].id) : null;
+}
 
 // ---------------------------------------------------------------- GRAIN shell (P2)
 // GRAIN is installed as a git dependency (node_modules/@tjakoen/grain), never a monorepo sibling
@@ -238,7 +246,7 @@ function onboardingState() {
     envFileExists: existsSync(ENV_FILE),
     anyCreds: credRoles().some((c: any) => c.usernameSet && c.passwordSet),
     hasRuns: listRuns().length > 0,
-    reportExists: existsSync(join(REPORT_DIR, "index.html")),
+    reportExists: listRuns().length > 0, // Gate A: "a report" now means the newest run has one
     testCount: specFiles().length,
   };
 }
@@ -375,7 +383,16 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/bug.js") return serveStatic(join(HERE, "pages", "bug.js"));
 
   // ---- status + run control ----
-  if (p === "/api/state") return json(publicState());
+  // Gate B: /api/state?run=<runId> is the new keyed shape (404 if unknown); no `run` param keeps
+  // the frozen SPA's compat behaviour — the newest active-or-most-recent run's state, or idle.
+  if (p === "/api/state") {
+    const run = qp.get("run");
+    if (run) {
+      const st = publicState(run);
+      return st ? json(st) : json({ error: "Unknown run." }, 404);
+    }
+    return json(publicState());
+  }
 
   if (p === "/api/envs") {
     if (method === "GET") {
@@ -396,11 +413,32 @@ async function handle(req: Request): Promise<Response> {
   }
 
   if (p === "/api/run" && method === "POST") {
+    // P5 Gate D (plans/platform.md §6): every run is now a QUEUED db row, not a direct spawn — the
+    // scheduler (lib/run-queue.ts) resolves the DB→child config/credential handoff itself once the
+    // row actually gets its turn (its own `resolveScopedUser`, since by then the HTTP request that
+    // enqueued it is long gone). Demo mode never enqueues (read-only, no accounts to own a row).
+    if (IS_DEMO) return okOr(denyInDemo, 409);
+    if (!user) return json({ error: "unauthenticated" }, 401); // belt-and-suspenders — the session gate above already guarantees this outside demo mode
     const { env, envs, light, files, grep, role } = await readBody(req);
-    // Accept either `envs` (array — multi-env) or `env` (string — single).
-    return okOr(startRun(envs != null ? envs : env, light, files, grep, role), 409);
+    // Accept either `envs` (array — multi-env) or `env` (string — single). Response now carries
+    // `runId` (subscribe to /api/stream?run=<runId> immediately — it's live from the moment the run
+    // is queued, Gate D) + `position` (0 = starting now; N>0 = N runs ahead of it).
+    const envList = (envs != null ? (Array.isArray(envs) ? envs : [envs]) : env ? [env] : [])
+      .map((e: unknown) => String(e ?? "").trim())
+      .filter(Boolean);
+    const { runId, position } = await enqueueRun({ userId: user.id, envs: envList, files, grep, role, light: !!light });
+    return json({ ok: true, runId, position });
   }
-  if (p === "/api/stop" && method === "POST") return okOr(stopRun(), 409);
+  // Gate D: /api/queue — every currently queued/running row + its position, for the Run page to
+  // poll (or reconcile against the `queued`/`position`/`done` global-channel events it also gets).
+  if (p === "/api/queue" && method === "GET") return json({ ok: true, queue: listQueue() });
+  // Gate B/D: ?run=<runId> stops that specific run (queued -> never starts; running -> killed) via
+  // the queue; no param keeps the frozen SPA's compat behaviour (stop an in-flight recording, or —
+  // legacy shape — whatever lib/runner.ts's own map still thinks is "the active run").
+  if (p === "/api/stop" && method === "POST") {
+    const runParam = qp.get("run");
+    return okOr(runParam ? stopQueuedRun(runParam) : stopLegacy(undefined), 409);
+  }
   if (p === "/api/record" && method === "POST") {
     const { env, name, role } = await readBody(req);
     return okOr(await startRecording(env, name, role), 409);
@@ -414,7 +452,16 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ---- live run output (SSE, replay-on-connect) ----
-  if (p === "/api/stream") return runStream();
+  // Gate B: ?run=<runId> is the new keyed stream (404 if unknown); no param is the frozen SPA's
+  // compat stream — the newest-or-recording run's replay + the cross-run global channel.
+  if (p === "/api/stream") {
+    const run = qp.get("run");
+    if (run) {
+      const stream = runStream(run);
+      return stream ?? new Response("Unknown run.", { status: 404 });
+    }
+    return runStream();
+  }
 
   if (p === "/api/runs") return json(listRuns());
 
@@ -536,8 +583,10 @@ async function handle(req: Request): Promise<Response> {
 
   // ---- archived reports + run artifacts (byte-preserving static, traversal-guarded) ----
   if (p.startsWith("/report")) {
+    const dir = latestRunDir();
+    if (!dir) return new Response("No test runs yet.", { status: 404 });
     const rel = p === "/report" || p === "/report/" ? "index.html" : p.slice("/report/".length);
-    const target = safeResolve(REPORT_DIR, decodeURIComponent(rel));
+    const target = safeResolve(dir, decodeURIComponent(rel));
     if (!target) return new Response("Forbidden", { status: 403 });
     return serveStatic(target);
   }
@@ -564,6 +613,17 @@ runAppMigrations();
 // after both migration runners so `organization`/`team` exist. auth/index.ts's databaseHooks
 // joins every new user to these on creation.
 ensureDefaultOrg();
+// Seed config/roles.json on first boot (was a roles.ts load-time side-effect — moved here to
+// break the roles.ts↔creds.ts import-cycle TDZ that crashed a fresh boot with no roles.json).
+seedRoles();
+// P5 Gate D (plans/platform.md §6): crash recovery BEFORE anything can observe a stale row as
+// still active — any `run` left `running` from a previous (crashed/killed) process becomes
+// `error`, any `queued` becomes `stopped` (never silently auto-resumed). Then a first `tick()` in
+// case anything is still legitimately queued (there shouldn't be, reconcileOnBoot just cleared it,
+// but a fresh boot with a from-scratch db or a future change to that policy makes this a no-op
+// worth having rather than a queue that only ever starts moving once someone hits /api/run again).
+reconcileOnBoot();
+tickQueue();
 
 // ---------------------------------------------------------------------- serve
 try {
@@ -603,10 +663,20 @@ try {
 }
 
 // Kill any in-flight run/recording so exiting doesn't orphan a detached Playwright process group.
+// Gate B: there's no single `state.proc` anymore — walk every run handle (there's only ever one
+// active in practice, the lock stays until Gate D) plus the separate recording proc.
 function shutdown() {
-  if (state.proc) {
+  for (const h of allRunHandles()) {
+    if (!h.proc) continue;
     try {
-      killProc(state.proc);
+      killProc(h.proc);
+    } catch {
+      /* best effort */
+    }
+  }
+  if (recordingState.proc) {
+    try {
+      killProc(recordingState.proc);
     } catch {
       /* best effort */
     }

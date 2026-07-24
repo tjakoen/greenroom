@@ -13,9 +13,11 @@ export function accountsBody(): string {
       shown; a saved password is never shown again.</p>
   </header>
   <div id="accountsNotice" class="callout" data-status="strong" hidden></div>
-  <p class="callout" data-status="strong">Transitional: these credentials are not wired into test
-    runs yet — the runner still reads logins from <code>.env</code> (Settings → Roles &amp;
-    logins). Editing an account here does not change what a run logs in as until a later phase.</p>
+  <p class="callout" data-status="strong">Set a <strong>Role</strong> (e.g. <code>admin</code>)
+    to hand this account to real test runs: a run resolves the matching
+    <code>&lt;role&gt;</code>/environment credential from here (decrypted only in the test
+    runner's own process — never written to disk) instead of <code>.env</code>. An account with
+    no role is not handed off to any run yet.</p>
 
   <section class="card" data-pad="md">
     <div class="section-head"><span>Your accounts</span></div>
@@ -40,6 +42,10 @@ export function accountsBody(): string {
       <label class="field" data-size="sm">
         <span class="field__label">Environment</span>
         <select class="field__input" id="newAccountEnv"><option value="">Any / not tied to one</option></select>
+      </label>
+      <label class="field" data-size="sm">
+        <span class="field__label">Role</span>
+        <input class="field__input" id="newAccountRole" name="role" placeholder="admin">
       </label>
       <label class="field" data-size="sm">
         <span class="field__label">Visibility</span>

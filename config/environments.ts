@@ -46,12 +46,22 @@ type UrlsFile = Record<string, EnvEntry>;
 
 // The parsed urls.json (or the committed template on a fresh clone), unfiltered
 // so callers can read non-env keys like `_login`.
+//
+// P5 Gate C (plans/platform.md §6): when envs/creds live in the DB, the queue worker
+// (lib/run-config.ts's buildRunConfig) materializes a per-run, scoped snapshot in the same
+// urls.json shape and points GREENROOM_URLS_FILE at its absolute path before spawning the
+// Playwright child — that env var wins over the flat-file default so every downstream reader in
+// this module (loadUrls/getLoginForm/getSelectedEnvs/baseURLof) picks it up for free. Unset (a
+// hand-run `npx playwright test`, or a run with no DB-backed bundle) falls back to today's
+// urls.json/urls.example.json path — nothing changes for that case.
 function rawUrlsFile(): Record<string, unknown> {
-  // urls.json holds your real environments and is git-ignored. On a fresh clone
-  // it may not exist yet, so fall back to the committed template.
-  const own = path.join(__dirname, 'urls.json');
-  const example = path.join(__dirname, 'urls.example.json');
-  const file = fs.existsSync(own) ? own : example;
+  const override = process.env.GREENROOM_URLS_FILE;
+  const file =
+    override && path.isAbsolute(override)
+      ? override
+      : fs.existsSync(path.join(__dirname, 'urls.json'))
+        ? path.join(__dirname, 'urls.json')
+        : path.join(__dirname, 'urls.example.json');
   return JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
 }
 

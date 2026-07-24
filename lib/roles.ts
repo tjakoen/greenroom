@@ -59,7 +59,11 @@ export function seedRoles(): void {
     /* best effort — a read-only checkout still works via loadRolesRaw fallback */
   }
 }
-seedRoles();
+// NOTE: seedRoles() is intentionally NOT called at module load. roles.ts and creds.ts form an
+// import cycle (roles imports scanCredRoles from creds; creds imports rolesWithStatus from roles),
+// so a load-time call ran scanCredRoles() before creds.ts finished initializing ENV_EXAMPLE → a
+// TDZ crash on a fresh boot (no config/roles.json). server.ts now calls seedRoles() explicitly at
+// boot, after modules are fully evaluated.
 
 // Role definitions expanded with per-env credential status. This is what the
 // Roles & logins UI renders: for each role, the sites it maps to, the saved

@@ -478,6 +478,10 @@
   // compat channel (page load — mirrors whatever's already active, exactly like the frozen SPA).
   // Never both at once, so a run's `line`s are never delivered twice to this page.
   let streamEvents = null;
+  // Close the SSE connection when leaving the page — otherwise the browser tears the chunked
+  // response down mid-flight and logs net::ERR_INCOMPLETE_CHUNKED_ENCODING / an AbortError on the
+  // next page. pagehide covers both normal navigation and bfcache.
+  addEventListener('pagehide', () => { if (streamEvents) { streamEvents.close(); streamEvents = null; } });
   function openStream(runId) {
     if (streamEvents) streamEvents.close();
     streamEvents = new EventSource(runId ? '/api/stream?run=' + encodeURIComponent(runId) : '/api/stream');

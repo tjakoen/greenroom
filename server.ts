@@ -87,7 +87,18 @@ const serveGrainAssets = makeStatic(bunRuntime, join(GRAIN_ROOT, "assets"));
 // grain.css @font-face's the Redaction faces at absolute /fonts/* URLs — serve grain's own
 // fonts/ so the shell renders in GRAIN's typeface instead of silently falling back to system
 // fonts (pantry omits this and falls back; greenroom serves them).
-const serveGrainFonts = makeStatic(bunRuntime, join(GRAIN_ROOT, "fonts"));
+// Fonts are BINARY (woff2/woff/ttf). BATCH's makeStatic text-reads its files, which corrupts
+// binaries (same reason /vs + report/runs use serveFileRanged) — serving the Redaction woff2s
+// through makeStatic produced "OTS parsing error / decompressed WOFF size < compressed" in every
+// browser and silently fell the whole app back to Times New Roman. Byte-serve them instead.
+const GRAIN_FONTS = join(GRAIN_ROOT, "fonts");
+const FONT_MIME: Record<string, string> = { ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".otf": "font/otf" };
+async function serveGrainFonts(req: Request, rel: string): Promise<Response> {
+  const abs = safeResolve(GRAIN_FONTS, rel.replace(/^\//, ""));
+  if (!abs) return new Response("Forbidden", { status: 403 });
+  const ext = abs.slice(abs.lastIndexOf("."));
+  return serveFileRanged(req, abs, FONT_MIME[ext]);
+}
 const componentCss = createStyleBundle(bunRuntime, join(GRAIN_ROOT, "components"));
 
 // Monaco's classic-AMD self-host assets (P4 editor): served static under /vs/, byte-preserving
@@ -330,7 +341,7 @@ async function handle(req: Request): Promise<Response> {
   if (p.startsWith("/styles/")) return serveGrainStyles(p.slice("/styles".length));
   if (p.startsWith("/scripts/")) return serveGrainScripts(p.slice("/scripts".length));
   if (p.startsWith("/assets/")) return serveGrainAssets(p.slice("/assets".length));
-  if (p.startsWith("/fonts/")) return serveGrainFonts(p.slice("/fonts".length));
+  if (p.startsWith("/fonts/")) return serveGrainFonts(req, p.slice("/fonts".length));
   if (p.startsWith("/vs/")) return serveVs(req, p.slice("/vs/".length));
   if (p === "/favicon.ico") return new Response(null, { status: 204 });
   if (p === "/components.css") return new Response(await componentCss.css(), { headers: { "Content-Type": "text/css" } });

@@ -30,7 +30,7 @@ import { test, testVersion, type Visibility } from "../db/schema.ts";
 import { canRead, type ScopedUser } from "../lib/scope.ts";
 import { writeAudit } from "../lib/audit.ts";
 import { parseTests } from "../lib/tests-lib.ts";
-import { ROOT, TESTS_DIR, IS_DEMO, denyInDemo, readFileMaybe, validTestFile } from "../lib/paths.ts";
+import { ROOT, TESTS_DIR, IS_DEMO, IS_LOCAL, denyInDemo, readFileMaybe, validTestFile } from "../lib/paths.ts";
 
 export type ApiCtx = {
   req: Request;
@@ -240,6 +240,48 @@ function scrapeDiagnostics(output: string, rel: string): Diagnostic[] {
   return out;
 }
 
+// ---- LOCAL edition: disk-only editor (no db) ------------------------------------------------
+// The version-history + audit trail are PLATFORM features (they live in the db `testVersion`
+// table). The LOCAL edition edits the file on disk directly with the same parse-guard + Playwright
+// --list validation, but no history: /api/test-versions is empty and /api/test-version 404s.
+// Crucially this path NEVER touches `db`, so the (lazy) db handle is never opened in local mode.
+async function editorLocal(ctx: ApiCtx): Promise<Response> {
+  const rel = String((ctx.method === "GET" ? ctx.qp.get("file") : (await readBody(ctx.req))?.file) ?? "");
+  if (ctx.p === "/api/test-source") {
+    if (ctx.method === "GET") {
+      if (!validTestFile(rel)) return json({ error: "No such test file." }, 404);
+      return json({ file: rel, source: readFileMaybe(abs(rel)), versionCount: 0, testId: null });
+    }
+    if (ctx.method === "PUT") {
+      if (IS_DEMO) return json(denyInDemo, 403);
+      const body = await readBody(ctx.req);
+      const r = String(body?.file ?? "");
+      const source = typeof body?.source === "string" ? body.source : null;
+      if (!validTestFile(r)) return json({ ok: false, error: "No such test file." }, 404);
+      if (source == null) return json({ ok: false, error: "source is required" }, 400);
+      const diagnostics = parseGuard(source);
+      if (diagnostics.length) return json({ ok: false, error: "Spec doesn't parse — fix the errors and try again.", diagnostics }, 400);
+      writeFileSync(abs(r), source);
+      return json({ ok: true, versionCount: 0, testId: null });
+    }
+    return json({ error: "method not allowed" }, 405);
+  }
+  if (ctx.p === "/api/test-versions") return json({ versions: [] });
+  if (ctx.p === "/api/test-version") return json({ error: "Version history is a platform feature." }, 404);
+  // /api/validate — identical to the platform path minus the db-backed scope check.
+  if (IS_DEMO) return json(denyInDemo, 403);
+  if (!validTestFile(rel)) return json({ ok: false, error: "No such test file." }, 404);
+  const parseDiags = parseGuard(readFileMaybe(abs(rel)));
+  if (parseDiags.length) return json({ ok: true, valid: false, diagnostics: parseDiags, output: parseDiags[0].message });
+  const proc = Bun.spawn(["npx", "playwright", "test", "--list", rel], { cwd: ROOT, stdout: "pipe", stderr: "pipe", env: { ...process.env } });
+  const timer = setTimeout(() => proc.kill(), 30_000);
+  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  clearTimeout(timer);
+  const output = (err + out).trim();
+  const valid = code === 0;
+  return json({ ok: true, valid, output, diagnostics: valid ? [] : scrapeDiagnostics(output, rel) });
+}
+
 // ---- entry point ---------------------------------------------------------------------------
 export async function editorApi(ctx: ApiCtx): Promise<Response | null> {
   if (
@@ -250,6 +292,8 @@ export async function editorApi(ctx: ApiCtx): Promise<Response | null> {
   ) {
     return null;
   }
+  // LOCAL edition: no accounts, no db — handle the editor entirely on disk (see editorLocal).
+  if (IS_LOCAL) return editorLocal(ctx);
   if (!ctx.user) return json({ error: "unauthenticated" }, 401);
 
   if (ctx.p === "/api/test-source") {

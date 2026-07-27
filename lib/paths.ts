@@ -16,6 +16,22 @@ export const IS_DEMO = Bun.env.GREENROOM_DEMO === "1";
 export const DEMO_DIR = join(ROOT, "demo");
 export const denyInDemo = { ok: false as const, demo: true as const, error: "Demo mode is read-only." };
 
+// ---- runtime edition (local single-user tool vs deployed multi-user platform) ----------------
+// Greenroom ships as TWO editions from ONE codebase:
+//   • LOCAL (default)   — the original single-user tool: loopback, NO accounts/sessions, config in
+//                          flat files (.env / config/*.json), runs via the legacy runner. The db
+//                          file (data/greenroom.db) is NEVER opened — every db/auth path is gated
+//                          off below and behind lazy handles in db/index.ts + auth/index.ts.
+//   • PLATFORM          — the multi-user deployment: better-auth accounts + sessions, the embedded
+//                          SQLite DB (scoped/audited config, encrypted creds), the server-side run
+//                          queue, Accounts/Environments/Admin surfaces.
+// Opt in to PLATFORM with GREENROOM_MODE=platform, or implicitly by setting ALLOWED_HOSTS (a real
+// deployment is always the platform edition — see DEPLOY.md). Demo is a read-only LOCAL variant, so
+// it can never be platform.
+export const IS_PLATFORM =
+  !IS_DEMO && (Bun.env.GREENROOM_MODE === "platform" || !!Bun.env.ALLOWED_HOSTS);
+export const IS_LOCAL = !IS_PLATFORM;
+
 export const TESTS_DIR = join(ROOT, "tests");
 // App-managed test metadata sidecar (group/priority/owner/notes/role), demo-swapped. Shared by
 // tests-lib (loadMeta/saveMeta) and recorder (setRecordedRole).

@@ -76,7 +76,8 @@ Playwright. `npm start`/`npm run demo` shell out to bun.
 ```bash
 npm install                    # deps + Chromium (postinstall); if `bun install` flakes on
                                #   the private GRAIN github deps, `npm install` git-clones them
-npm start                      # the app (bun server.ts): web interface at http://localhost:4321
+npm start                      # the app (bun server.ts): LOCAL edition — single-user, no accounts, flat-file config
+npm run start:platform         # PLATFORM edition — multi-user accounts + DB (GREENROOM_MODE=platform); ALLOWED_HOSTS also implies it
 npm run menu                   # terminal menu runner (prompts for the environment)
 TEST_ENV=<env> npx playwright test   # run all tests against one environment
 npm run record                 # record a test by clicking through the site (opens a browser)
@@ -144,6 +145,7 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 
 | You change… | …also update |
 |---|---|
+| **The local/platform edition split** (what's gated per edition) | `lib/paths.ts` `IS_PLATFORM`/`IS_LOCAL` (the flag: `GREENROOM_MODE=platform` or `ALLOWED_HOSTS`; demo is always local) ↔ `server.ts` (boot migrations/queue guarded by `IS_PLATFORM`; the session gate is `if (IS_PLATFORM)`; scoped APIs `adminApi`/`accountsApi`/`environmentsApi` + their `/accounts`,`/environments`,`/admin` pages + `/api/auth/*` platform-only; `/api/run` → `startRun` in local vs `enqueueRun` in platform; `VISIBLE_NAV` hides `platform:true` rail items **and `local:true` ones — Settings is local-only**; the flat-file config WRITE endpoints `/api/{creds,roles,groups,envs}` return `PLATFORM_CONFIG_LOCKED` 403 in platform, GET stays — audit blocker #1; a deployed instance (`ALLOWED_HOSTS`) refuses to boot without `BETTER_AUTH_SECRET`/`SECRET_KEY`/https `BETTER_AUTH_URL` — audit #3) ↔ `db/index.ts` (lazy `openSqlite`/`db`/`sqlite` — never opened in local) ↔ `auth/index.ts` (lazy `makeAuth`/`auth`) ↔ `pages/editor-api.ts` (`editorLocal` disk-only path). **Invariant: nothing on a LOCAL request may touch `db`/`auth`** (or the lazy handle opens `data/greenroom.db`). |
 | **An environment** (add/edit/remove) | Just use the app's **Environments** panel (writes `config/urls.json`, seeds `.env.example`). Envs are dynamic — `config/environments.ts` reads `urls.json` at runtime; the runner targets `tests/` regardless of env, so no `EnvName` type or `package.json` script edit is needed. Mark exactly one `"default": true`. Add real logins in Settings → **Roles & logins**; set how the app's login form works in the same panel's **Login form** section (per env or shared). |
 | **A public URL** | `config/urls.json` (your real envs) and/or `config/urls.example.json` (the committed template). Never in a test. |
 | **The login form / selectors** | It's per-app **data**, not code: the `login` block per env (or shared `_login`) in `config/urls.json`, resolved by `config/environments.ts` **`getLoginForm(env)`** (env.login → `_login` → generic default). `tests/helpers/auth.ts` `login()` reads `getLoginForm` (only hand-edit `auth.ts` for exotic multi-step/MFA/SSO flows). Edited in-app via **Settings → Environments → Login form** (`lib/envs.ts` `saveEnv`/`saveSharedLogin` + `sanitizeLoginForm`, `GET/POST /api/envs` in `server.ts` carrying `login`/`sharedLogin`; `pages/settings.js` `refreshEnvs`/`saveSharedLogin` + `loginFieldsHtml`). Committed `urls.example.json` ships only generic placeholders → repo stays generic. Keep `context/frontend-structure.md` in step |
@@ -193,11 +195,21 @@ the memory. Durable, repo-worthy rules belong *in this file*, not in memory.
 
 ## Working notes
 
-- **Two runtime modes.** (1) **Local** — ships as a local app, loopback-only, no accounts; the
-  original mode, still the default. Recording uses a real browser on the user's screen (so recording
-  is local-only — a headless deploy can't open a codegen window). (2) **Deployed platform** — one
-  company runs one shared instance for many users; opt in via `HOST`/`ALLOWED_HOSTS` + the env in
-  [DEPLOY.md](DEPLOY.md). Both run from the same `bun server.ts`.
+- **Two editions from one codebase (real toggle — `lib/paths.ts` `IS_PLATFORM`/`IS_LOCAL`).**
+  (1) **Local** (default) — single-user tool, loopback, **no accounts/sessions**, config in flat
+  files (`.env`/`config/*.json`), runs via the **legacy runner** (`lib/runner.ts` `startRun`). The
+  embedded DB is **never opened** and better-auth is **never built** — every db/auth path is gated
+  off in `server.ts` and sits behind lazy handles (`db/index.ts` `openSqlite`/lazy `db`+`sqlite`
+  proxies; `auth/index.ts` `makeAuth`/lazy `auth` proxy). The Editor still works (disk-only, no
+  version history — that's a platform feature; `pages/editor-api.ts` `editorLocal`). Rail hides
+  Accounts/Environments/Admin; `/login` 302s to `/run`; `/api/auth/*` 404s.
+  (2) **Platform** — multi-user deployment: better-auth accounts + sessions (the whole session gate),
+  the SQLite DB (scoped/audited config, encrypted creds), the server-side **run queue**
+  (`enqueueRun`), Accounts/Environments/Admin. **Opt in** with `GREENROOM_MODE=platform`, or
+  implicitly by setting `ALLOWED_HOSTS` (a real deployment is always platform — [DEPLOY.md](DEPLOY.md)).
+  **Demo** (`GREENROOM_DEMO=1`) is a read-only *local* variant (no accounts, DB untouched).
+  Recording uses a real browser on the user's screen (local-only — a headless deploy can't open a
+  codegen window; refused on a deployed instance, Gate E). Both editions run from `bun server.ts`.
 - **VS Code is the primary entry point *for local use*.** Users open the folder in VS Code and use
   the `.vscode/` tasks (**🚀 Open Test App**, run/record/report) + the Testing panel; the web app at
   `localhost:4321` is the surface once started. On a **deployed** instance the entry point is just

@@ -7,6 +7,7 @@
   "scripts": {
     "postinstall": "playwright install chromium",
     "start": "bun server.ts",
+    "start:platform": "GREENROOM_MODE=platform bun server.ts",
     "demo": "GREENROOM_DEMO=1 bun server.ts",
     "dev": "bun --hot server.ts",
     "menu": "bash run.sh",

@@ -48,8 +48,15 @@ Residual risk / must-do before exposure (do NOT skip):
 
 Set these in the process environment (systemd unit, container env, etc.) — never commit them.
 
+> **Fail-closed:** when `ALLOWED_HOSTS` is set (a real deployment), the app **refuses to boot** if
+> `BETTER_AUTH_SECRET` or `SECRET_KEY` is unset, or if `BETTER_AUTH_URL` is not `https://` — it will
+> not silently fall back to the dev session secret / dev encryption key / non-Secure cookies. Fix the
+> reported vars and restart. (A local platform run without `ALLOWED_HOSTS` still tolerates the dev
+> fallbacks.)
+
 | Var | Required for deploy | What it does |
 |---|---|---|
+| `GREENROOM_MODE` | — | `platform` selects the multi-user edition (accounts + DB + run queue). **Setting `ALLOWED_HOSTS` already implies platform**, so a real deploy rarely needs this explicitly; it exists to run the platform edition locally (e.g. `npm run start:platform`) without exposing a host. Unset + no `ALLOWED_HOSTS` = the LOCAL single-user edition (no accounts, no DB). |
 | `HOST` | yes | Bind address. Default `127.0.0.1` (loopback). Set `0.0.0.0` to accept the proxy's connections. |
 | `PORT` | — | Listen port (default 4321). |
 | `ALLOWED_HOSTS` | yes | Comma-separated hostname(s) the instance is served on, e.g. `greenroom.example.com`. The guard rejects any other `Host`/cross-origin write. Unset → loopback-only. |

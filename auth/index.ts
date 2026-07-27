@@ -15,7 +15,7 @@ import { organization } from "better-auth/plugins/organization";
 import { admin } from "better-auth/plugins/admin";
 import { sso } from "@better-auth/sso";
 import { getMigrations } from "better-auth/db/migration";
-import { sqlite } from "../db/index.ts";
+import { sqlite, openSqlite } from "../db/index.ts";
 import { countUsers, getTeamIds, isSuperadminEmail, joinDefaultOrg } from "./bootstrap.ts";
 
 // DEV-ONLY fallback — this constant must NEVER be relied on in production. Set BETTER_AUTH_SECRET
@@ -55,8 +55,17 @@ const TRUSTED_ORIGINS = Array.from(new Set([
 const IS_DEPLOYED = !!process.env.ALLOWED_HOSTS;
 const IP_ADDRESS = IS_DEPLOYED ? { ipAddressHeaders: ["x-forwarded-for"] } : undefined;
 
-export const auth = betterAuth({
-  database: sqlite,
+// Lazy-built (local/platform split): constructing better-auth opens the db (database: openSqlite())
+// and loads the plugin stack. The LOCAL edition never builds it — server.ts only ever touches
+// `auth` on platform routes (/api/auth/*, the session gate, admin-api). Exported as a proxy so all
+// call sites (auth.handler / auth.api.* / auth.options) work unchanged; the real instance is built
+// on first property access and memoized.
+// A pure factory so `ReturnType<typeof makeAuth>` keeps better-auth's fully-inferred, plugin-
+// augmented type (auth.api.listUsers/setRole/createTeam/… come from the admin + organization
+// plugins). Only CALLED lazily by buildAuth() — never at import — so the db stays closed in local.
+function makeAuth() {
+  return betterAuth({
+  database: openSqlite(),
   emailAndPassword: {
     enabled: true,
   },
@@ -109,6 +118,18 @@ export const auth = betterAuth({
       "/sign-in/email": { window: 60, max: 10 },
       "/sign-up/email": { window: 60, max: 10 },
     },
+  },
+  });
+}
+let _auth: ReturnType<typeof makeAuth> | null = null;
+function buildAuth(): ReturnType<typeof makeAuth> {
+  return (_auth ??= makeAuth());
+}
+export const auth: ReturnType<typeof makeAuth> = new Proxy({} as ReturnType<typeof makeAuth>, {
+  get(_t, prop) {
+    const a = buildAuth() as any;
+    const v = a[prop];
+    return typeof v === "function" ? v.bind(a) : v;
   },
 });
 

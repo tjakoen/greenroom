@@ -22,7 +22,7 @@ import { createCatalog } from "@tjakoen/grain/catalog/catalog.ts";
 
 import { guardRequest } from "./lib/guard.ts";
 import { serveFileRanged, safeResolve, mimeOf } from "./lib/binary.ts";
-import { ROOT, PORT, IS_DEMO, readFileMaybe, denyInDemo } from "./lib/paths.ts";
+import { ROOT, PORT, IS_DEMO, IS_PLATFORM, IS_LOCAL, readFileMaybe, denyInDemo } from "./lib/paths.ts";
 import { runAppMigrations } from "./db/index.ts";
 import { auth, runAuthMigrations, getSessionUser } from "./auth/index.ts";
 import { ensureDefaultOrg } from "./auth/bootstrap.ts";
@@ -38,7 +38,7 @@ import {
   specFiles, recordedInputs, applyInputs,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
-import { stopRun as stopLegacy, killProc } from "./lib/runner.ts";
+import { startRun, stopRun as stopLegacy, killProc } from "./lib/runner.ts";
 import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue } from "./lib/run-queue.ts";
 import { startRecording } from "./lib/recorder.ts";
 import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
@@ -116,24 +116,31 @@ async function serveVs(req: Request, rel: string): Promise<Response> {
 
 // The rail + ⌘K destinations, in one place so the shell nav and /search.json agree. Every
 // destination below is a real GRAIN page as of the P6 cutover.
-const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean }> = [
+// `platform: true` = a PLATFORM-edition-only destination (db-backed accounts/environments/admin).
+// `local: true` = a LOCAL-edition-only destination (the flat-file Settings page — its panels are the
+// legacy config plane, which the platform edition replaces with Accounts/Environments/Admin).
+// Each edition drops the other's entries from the rail + ⌘K + search index; the rest is shared.
+const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean; platform?: boolean; local?: boolean }> = [
   { key: "run", label: "Run", href: "/run", icon: "loop" },
   { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
   { key: "editor", label: "Editor", href: "/editor", icon: "files" },
   { key: "history", label: "History", href: "/history", icon: "traces" },
   { key: "bug", label: "Report a bug", href: "/bug", icon: "send" },
-  { key: "environments", label: "Environments", href: "/environments", icon: "rules" },
-  { key: "accounts", label: "Accounts", href: "/accounts", icon: "pin" },
+  { key: "environments", label: "Environments", href: "/environments", icon: "rules", platform: true },
+  { key: "accounts", label: "Accounts", href: "/accounts", icon: "pin", platform: true },
   { key: "guide", label: "User guide", href: "/guide", icon: "knowledge" },
   { key: "plans", label: "Plans", href: "/plans", icon: "files" },
   { key: "catalog", label: "Catalog", href: "/catalog", icon: "spark" },
-  { key: "admin", label: "Admin", href: "/admin", icon: "settings", footer: true },
-  { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true },
+  { key: "admin", label: "Admin", href: "/admin", icon: "settings", footer: true, platform: true },
+  { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true, local: true },
 ];
+// The rail/search destinations for the CURRENT edition: platform-only entries hidden in local, and
+// local-only entries (Settings) hidden in platform.
+const VISIBLE_NAV = NAV.filter((n) => (IS_PLATFORM || !n.platform) && (IS_LOCAL || !n.local));
 // Every NAV destination is a real page as of P6 (no hash routes left to filter out) — kept as a
 // filter anyway so a future non-page NAV entry (an external link, say) can't leak into the
 // catalog's page-nav / component search index.
-const SHELL_PAGE_HREFS = NAV.filter((n) => !n.href.includes("#")).map((n) => n.href);
+const SHELL_PAGE_HREFS = VISIBLE_NAV.filter((n) => !n.href.includes("#")).map((n) => n.href);
 
 const STYLESHEETS = [
   "/styles/variables.css", "/styles/global.css", "/styles/grain.css", "/styles/cmdk.css",
@@ -156,8 +163,8 @@ function railNav(active?: string): string {
     return `<a class="nav-item" href="${escapeHtml(n.href)}"${current}>${icon(n.icon)}` +
       `<span class="nav-item__label">${escapeHtml(n.label)}</span></a>`;
   };
-  const main = NAV.filter((n) => !n.footer).map(item).join("\n    ");
-  const footer = NAV.filter((n) => n.footer).map(item).join("\n    ");
+  const main = VISIBLE_NAV.filter((n) => !n.footer).map(item).join("\n    ");
+  const footer = VISIBLE_NAV.filter((n) => n.footer).map(item).join("\n    ");
   return `${main}\n    <div class="side-rail__spacer"></div>\n    ${footer}`;
 }
 
@@ -256,6 +263,15 @@ const json = (data: unknown, status = 200): Response => Response.json(data as an
 const okOr = (result: { ok?: boolean }, bad = 400): Response =>
   json(result, result && result.ok ? 200 : bad);
 
+// Audit blocker #1: the legacy flat-file config WRITE endpoints (/api/{creds,roles,groups,envs})
+// are the LOCAL edition's plane. In PLATFORM mode they'd mutate shared config with no scope check,
+// no audit row, and (creds) plaintext-to-.env — bypassing the DB-backed Accounts/Environments
+// surfaces that do it right. Refuse them there and point at the scoped surface.
+const PLATFORM_CONFIG_LOCKED = (surface: string) => ({
+  ok: false as const,
+  error: `Not available in the platform edition — manage this in ${surface} (scoped + audited).`,
+});
+
 /** Serve a file byte-preserving (Bun.file), 404 when missing. Non-ranged sibling of serveFileRanged
  *  for html/js/css/png where Range isn't needed. */
 async function serveStatic(absPath: string): Promise<Response> {
@@ -290,19 +306,22 @@ async function handle(req: Request): Promise<Response> {
   const qp = url.searchParams;
 
   // ---- auth (P1 Gate 2): better-auth owns every /api/auth/* route (sign-up/sign-in/sign-out/
-  // get-session/...) — mount it before any other dispatch so it's reachable without a session. ----
-  if (p.startsWith("/api/auth")) return auth.handler(req);
+  // get-session/...) — mount it before any other dispatch so it's reachable without a session.
+  // PLATFORM edition only: the LOCAL edition has no accounts, so /api/auth/* 404s (and better-auth
+  // is never built — see auth/index.ts). ----
+  if (p.startsWith("/api/auth")) return IS_PLATFORM ? auth.handler(req) : json({ error: "not found" }, 404);
 
   // ---- session gate (P1 Gate 2): every route below this line requires a session EXCEPT this
   // allow-list — /api/auth/* (already handled above), the /login page + its client module, and
-  // every static/shell asset (the rail chrome the /login page itself needs to render). Demo mode
-  // is read-only + public — skip the gate entirely so `npm run demo` keeps working with no
-  // accounts. P6: "/" is a normal gated page like any other (it renders the Run page) — it is
-  // deliberately NOT in this allow-list, so an unauthenticated "/" 302s to /login below. ----
-  // Resolved once past the gate (non-null for every gated route in non-demo mode); handed to the
-  // P2 scoped API handlers below. Null in demo mode (gate skipped) — those handlers 401 on it.
+  // every static/shell asset (the rail chrome the /login page itself needs to render). The gate
+  // runs in the PLATFORM edition only: the LOCAL edition (and read-only demo) have no accounts, so
+  // there's nothing to sign into — every route is public. P6: "/" is a normal gated page like any
+  // other (it renders the Run page) — deliberately NOT in this allow-list, so an unauthenticated
+  // "/" 302s to /login below in platform mode. ----
+  // Resolved once past the gate (non-null for every gated route in platform mode); handed to the
+  // P2 scoped API handlers below. Null in local/demo mode (gate skipped) — those handlers 401 on it.
   let user: Awaited<ReturnType<typeof getSessionUser>> = null;
-  if (!IS_DEMO) {
+  if (IS_PLATFORM) {
     const gateAllowed =
       p === "/login" || p === "/login.js" ||
       p.startsWith("/styles/") || p.startsWith("/scripts/") || p.startsWith("/assets/") || p.startsWith("/fonts/") || p.startsWith("/vs/") ||
@@ -322,10 +341,14 @@ async function handle(req: Request): Promise<Response> {
 
   // ---- P2 scoped + audited platform APIs. Each handler owns its own /api/{admin,accounts,
   // environments}/* prefix and returns null to fall through. `user` is the ScopedUser resolved
-  // above (canRead/canWrite + superadmin enforced inside each handler). ----
+  // above (canRead/canWrite + superadmin enforced inside each handler). The admin/accounts/
+  // environments handlers are DB-backed → PLATFORM only. The editor runs in BOTH editions: it owns
+  // its own disk-only path for the LOCAL edition (see editorApi's IS_LOCAL branch). ----
   {
     const ctx = { req, url, p, method, qp, user };
-    const p2 = (await adminApi(ctx)) ?? (await accountsApi(ctx)) ?? (await environmentsApi(ctx)) ?? (await editorApi(ctx));
+    const p2 = IS_PLATFORM
+      ? (await adminApi(ctx)) ?? (await accountsApi(ctx)) ?? (await environmentsApi(ctx)) ?? (await editorApi(ctx))
+      : await editorApi(ctx);
     if (p2) return p2;
   }
 
@@ -348,7 +371,7 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/greenroom.css") return serveStatic(join(HERE, "pages", "greenroom.css"));
   if (p === "/catalog") return new Response(await catalog.html(), { headers: htmlHeaders });
   if (p === "/search.json") {
-    const pages = NAV.map((n) => ({ title: n.label, url: n.href }));
+    const pages = VISIBLE_NAV.map((n) => ({ title: n.label, url: n.href }));
     const components = (await catalog.entries()).map((c) => ({ title: c.name, subtitle: c.layer, url: `/catalog#${c.slug}` }));
     return json({ pages, components });
   }
@@ -357,23 +380,30 @@ async function handle(req: Request): Promise<Response> {
   // there's nothing to navigate to and no rail to show. loginBody() returns its own complete
   // standalone HTML document (own <head>, own minimal stylesheet set). Not in NAV — it isn't a
   // rail destination. ----
-  if (p === "/login") return new Response(loginBody(), { headers: htmlHeaders });
+  // PLATFORM only — the LOCAL edition has no accounts, so /login just bounces to the app.
+  if (p === "/login") return IS_PLATFORM ? new Response(loginBody(), { headers: htmlHeaders }) : new Response(null, { status: 302, headers: { Location: "/run" } });
   if (p === "/login.js") return serveStatic(join(HERE, "pages", "login.js"));
 
-  // ---- Settings (P2): server-rendered grain forms over the unchanged /api/{envs,roles,creds,
-  // groups} endpoints below — settings.js (a thin client module) does the fetch + re-render. ----
-  if (p === "/settings") return new Response(grainPage("Settings", settingsBody(), { active: "settings" }), { headers: htmlHeaders });
-  if (p === "/settings.js") return serveStatic(join(HERE, "pages", "settings.js"));
+  // ---- Settings: server-rendered grain forms over the flat-file /api/{envs,roles,creds,groups}
+  // endpoints. LOCAL edition only — the platform edition manages all of this through the DB-backed
+  // Accounts/Environments/Admin surfaces, so /settings 404s there (and is hidden from the rail). ----
+  if (IS_LOCAL) {
+    if (p === "/settings") return new Response(grainPage("Settings", settingsBody(), { active: "settings" }), { headers: htmlHeaders });
+    if (p === "/settings.js") return serveStatic(join(HERE, "pages", "settings.js"));
+  }
 
   // ---- P2 platform pages: Environments (DB + dual-write urls.json), Accounts (scoped test-target
   // creds), Admin (superadmin-only user/team management). Client modules fetch the /api handlers
-  // dispatched above. ----
-  if (p === "/environments") return new Response(grainPage("Environments", environmentsBody(), { active: "environments" }), { headers: htmlHeaders });
-  if (p === "/environments.js") return serveStatic(join(HERE, "pages", "environments.js"));
-  if (p === "/accounts") return new Response(grainPage("Accounts", accountsBody(), { active: "accounts" }), { headers: htmlHeaders });
-  if (p === "/accounts.js") return serveStatic(join(HERE, "pages", "accounts.js"));
-  if (p === "/admin") return new Response(grainPage("Admin", adminBody(), { active: "admin" }), { headers: htmlHeaders });
-  if (p === "/admin.js") return serveStatic(join(HERE, "pages", "admin.js"));
+  // dispatched above. PLATFORM edition only — the LOCAL edition has no accounts/DB, so these 404
+  // (they're also hidden from the rail; this stops a direct URL from rendering a dead page). ----
+  if (IS_PLATFORM) {
+    if (p === "/environments") return new Response(grainPage("Environments", environmentsBody(), { active: "environments" }), { headers: htmlHeaders });
+    if (p === "/environments.js") return serveStatic(join(HERE, "pages", "environments.js"));
+    if (p === "/accounts") return new Response(grainPage("Accounts", accountsBody(), { active: "accounts" }), { headers: htmlHeaders });
+    if (p === "/accounts.js") return serveStatic(join(HERE, "pages", "accounts.js"));
+    if (p === "/admin") return new Response(grainPage("Admin", adminBody(), { active: "admin" }), { headers: htmlHeaders });
+    if (p === "/admin.js") return serveStatic(join(HERE, "pages", "admin.js"));
+  }
 
   // ---- Tests (P3): server-rendered grain chip-group/b-select over the unchanged /api/{tests,
   // recorded-inputs,apply-inputs,test-tags,test-meta,tests/rename,roles,record,state} endpoints
@@ -430,6 +460,12 @@ async function handle(req: Request): Promise<Response> {
       const envs = envNames().map((n) => ({ name: n, baseURL: u[n].baseURL, login: sanitizeLoginForm(u[n] && u[n].login) }));
       return json({ envs, sharedLogin: sanitizeLoginForm(u._login) });
     }
+    // Writes are the LOCAL edition's flat-file config plane (config/urls.json). In PLATFORM mode,
+    // environments are the DB-backed, scoped + audited Environments surface (/api/environments) —
+    // the flat-file writer would bypass scope/audit, so it's refused here (audit blocker #1).
+    if (method === "POST" || method === "DELETE") {
+      if (IS_PLATFORM) return json(PLATFORM_CONFIG_LOCKED("Environments"), 403);
+    }
     if (method === "POST") {
       const body = await readBody(req);
       const result = body && body.shared
@@ -446,7 +482,6 @@ async function handle(req: Request): Promise<Response> {
     // row actually gets its turn (its own `resolveScopedUser`, since by then the HTTP request that
     // enqueued it is long gone). Demo mode never enqueues (read-only, no accounts to own a row).
     if (IS_DEMO) return okOr(denyInDemo, 409);
-    if (!user) return json({ error: "unauthenticated" }, 401); // belt-and-suspenders — the session gate above already guarantees this outside demo mode
     const { env, envs, light, files, grep, role } = await readBody(req);
     // Accept either `envs` (array — multi-env) or `env` (string — single). Response now carries
     // `runId` (subscribe to /api/stream?run=<runId> immediately — it's live from the moment the run
@@ -454,18 +489,26 @@ async function handle(req: Request): Promise<Response> {
     const envList = (envs != null ? (Array.isArray(envs) ? envs : [envs]) : env ? [env] : [])
       .map((e: unknown) => String(e ?? "").trim())
       .filter(Boolean);
+    // LOCAL edition: no queue, no db — the legacy runner spawns Playwright directly (concurrency is
+    // just the user's own single machine) and credentials come from .env in the child (users/
+    // roles.ts), so there's no DB→child credential handoff to resolve. No `position` (never queued).
+    if (IS_LOCAL) {
+      const res = startRun(envList, !!light, files, grep, role);
+      return json(res, res.ok ? 200 : 409);
+    }
+    if (!user) return json({ error: "unauthenticated" }, 401); // belt-and-suspenders — the session gate above already guarantees this in platform mode
     const { runId, position } = await enqueueRun({ userId: user.id, envs: envList, files, grep, role, light: !!light });
     return json({ ok: true, runId, position });
   }
   // Gate D: /api/queue — every currently queued/running row + its position, for the Run page to
-  // poll (or reconcile against the `queued`/`position`/`done` global-channel events it also gets).
-  if (p === "/api/queue" && method === "GET") return json({ ok: true, queue: listQueue() });
+  // poll. PLATFORM only (the queue is db-backed); the LOCAL edition never queues, so it's empty.
+  if (p === "/api/queue" && method === "GET") return json({ ok: true, queue: IS_PLATFORM ? listQueue() : [] });
   // Gate B/D: ?run=<runId> stops that specific run (queued -> never starts; running -> killed) via
-  // the queue; no param keeps the frozen SPA's compat behaviour (stop an in-flight recording, or —
-  // legacy shape — whatever lib/runner.ts's own map still thinks is "the active run").
+  // the queue (platform); otherwise the legacy stop (stop an in-flight recording, or whatever
+  // lib/runner.ts's own map thinks is "the active run" — the only path in the LOCAL edition).
   if (p === "/api/stop" && method === "POST") {
     const runParam = qp.get("run");
-    return okOr(runParam ? stopQueuedRun(runParam) : stopLegacy(undefined), 409);
+    return okOr(IS_PLATFORM && runParam ? stopQueuedRun(runParam) : stopLegacy(undefined), 409);
   }
   if (p === "/api/record" && method === "POST") {
     const { env, name, role } = await readBody(req);
@@ -573,17 +616,22 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/api/results") return json(readResults(qp.get("run") || "latest"));
 
   // ---- credentials / roles / groups ----
+  // GET stays in both editions (the Run/Tests pickers read the role/group lists). WRITES are the
+  // LOCAL flat-file plane; in PLATFORM they'd bypass the scoped + audited + AES-encrypted DB stores
+  // (creds → plaintext .env!), so they're refused (audit blocker #1) — use Accounts/Admin instead.
   if (p === "/api/creds") {
     if (method === "GET") return json(credRoles());
-    if (method === "POST") return okOr(saveCred(await readBody(req)));
+    if (method === "POST") return IS_PLATFORM ? json(PLATFORM_CONFIG_LOCKED("Accounts"), 403) : okOr(saveCred(await readBody(req)));
   }
   if (p === "/api/roles") {
     if (method === "GET") return json(rolesWithStatus());
+    if (IS_PLATFORM && (method === "POST" || method === "DELETE")) return json(PLATFORM_CONFIG_LOCKED("Accounts"), 403);
     if (method === "POST") return okOr(saveRole(await readBody(req)));
     if (method === "DELETE") return okOr(deleteRole(String(qp.get("name") || "")));
   }
   if (p === "/api/groups") {
     if (method === "GET") return json(listGroups());
+    if (IS_PLATFORM && (method === "POST" || method === "DELETE")) return json(PLATFORM_CONFIG_LOCKED("Environments"), 403);
     if (method === "POST") return okOr(saveGroup(await readBody(req)));
     if (method === "DELETE") return okOr(deleteGroup(String(qp.get("name") || "")));
   }
@@ -635,23 +683,49 @@ async function handle(req: Request): Promise<Response> {
 // ownership" box): better-auth's own runner creates its tables first, then drizzle's migrate()
 // creates ours. Runs every boot; both are no-ops once the schema is current. Top-level await is
 // fine under bun.
-await runAuthMigrations();
-runAppMigrations();
-// Single default organization + "Unassigned" team (plans/platform.md §2) — idempotent, must run
-// after both migration runners so `organization`/`team` exist. auth/index.ts's databaseHooks
-// joins every new user to these on creation.
-ensureDefaultOrg();
-// Seed config/roles.json on first boot (was a roles.ts load-time side-effect — moved here to
-// break the roles.ts↔creds.ts import-cycle TDZ that crashed a fresh boot with no roles.json).
+// Fail closed on a real deployment (audit #4 — no silent security downgrades). ALLOWED_HOSTS set =
+// internet-exposed behind a proxy, so the dev fallbacks (auth/index.ts DEV_SECRET_FALLBACK →
+// forgeable sessions; lib/secret.ts dev key → publicly-known cred encryption; http → no Secure
+// cookie) MUST NOT apply. Refuse to boot rather than come up quietly insecure. A local-platform dev
+// run (GREENROOM_MODE=platform, no ALLOWED_HOSTS) still tolerates the fallbacks.
+if (process.env.ALLOWED_HOSTS) {
+  const missing = ["BETTER_AUTH_SECRET", "SECRET_KEY"].filter((k) => !process.env[k]);
+  const problems = missing.map((k) => `${k} is unset`);
+  if (!(process.env.BETTER_AUTH_URL || "").startsWith("https://")) {
+    problems.push("BETTER_AUTH_URL must be an https:// URL (Secure cookies)");
+  }
+  if (problems.length) {
+    console.error(
+      "Refusing to start a deployed instance (ALLOWED_HOSTS is set) with insecure config:\n" +
+        problems.map((p) => `  • ${p}`).join("\n") +
+        "\nSet these in the environment (see DEPLOY.md) and restart.",
+    );
+    process.exit(1);
+  }
+}
+
+// PLATFORM edition only (lib/paths.ts IS_PLATFORM): open + migrate the db, build better-auth, seed
+// the default org, and start the run queue. The LOCAL edition skips ALL of this — no db file is
+// created, better-auth never loads, and runs go through the legacy runner (see /api/run below).
+if (IS_PLATFORM) {
+  await runAuthMigrations();
+  runAppMigrations();
+  // Single default organization + "Unassigned" team (plans/platform.md §2) — idempotent, must run
+  // after both migration runners so `organization`/`team` exist. auth/index.ts's databaseHooks
+  // joins every new user to these on creation.
+  ensureDefaultOrg();
+  // P5 Gate D (plans/platform.md §6): crash recovery BEFORE anything can observe a stale row as
+  // still active — any `run` left `running` from a previous (crashed/killed) process becomes
+  // `error`, any `queued` becomes `stopped` (never silently auto-resumed). Then a first `tick()` in
+  // case anything is still legitimately queued (there shouldn't be, reconcileOnBoot just cleared it,
+  // but a fresh boot with a from-scratch db or a future change to that policy makes this a no-op
+  // worth having rather than a queue that only ever starts moving once someone hits /api/run again).
+  reconcileOnBoot();
+  tickQueue();
+}
+// Seed config/roles.json on first boot (flat-file — both editions). Was a roles.ts load-time
+// side-effect; moved here to break the roles.ts↔creds.ts import-cycle TDZ that crashed a fresh boot.
 seedRoles();
-// P5 Gate D (plans/platform.md §6): crash recovery BEFORE anything can observe a stale row as
-// still active — any `run` left `running` from a previous (crashed/killed) process becomes
-// `error`, any `queued` becomes `stopped` (never silently auto-resumed). Then a first `tick()` in
-// case anything is still legitimately queued (there shouldn't be, reconcileOnBoot just cleared it,
-// but a fresh boot with a from-scratch db or a future change to that policy makes this a no-op
-// worth having rather than a queue that only ever starts moving once someone hits /api/run again).
-reconcileOnBoot();
-tickQueue();
 
 // ---------------------------------------------------------------------- serve
 try {
@@ -672,7 +746,8 @@ try {
       }
     },
   });
-  console.log(`Test interface ready → http://localhost:${PORT}  [BATCH·GRAIN·MILL·PROOF composition root]`);
+  const edition = IS_DEMO ? "demo (read-only)" : IS_PLATFORM ? "platform (multi-user)" : "local (single-user)";
+  console.log(`Test interface ready → http://localhost:${PORT}  [${edition}]`);
 } catch (err: any) {
   if (err?.code === "EADDRINUSE" || /in use|EADDRINUSE/i.test(String(err?.message))) {
     // Don't blindly assume it's us — another app on this port would otherwise make the VS Code

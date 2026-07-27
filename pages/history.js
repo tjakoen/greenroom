@@ -70,8 +70,14 @@
 
   async function init() {
     $('historySearch').oninput = renderRuns;
-    const runs = await api('/api/runs');
-    allRuns = Array.isArray(runs) ? runs : (runs && runs.runs) || [];
+    // Guard the load: a failed/non-JSON /api/runs (server down, 401/302) must not leave the page
+    // blank with an unhandled rejection — degrade to the empty state instead.
+    try {
+      const runs = await api('/api/runs');
+      allRuns = Array.isArray(runs) ? runs : (runs && runs.runs) || [];
+    } catch {
+      allRuns = [];
+    }
     renderRuns();
   }
 

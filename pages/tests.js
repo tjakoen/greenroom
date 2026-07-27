@@ -155,7 +155,7 @@
     // No `scope` field on TestEntry — the old row's t.scope was effectively empty; omitted.
     const sub = [
       t.role ? 'runs as: ' + esc(t.role) : '',
-      t.owner ? '👤 ' + esc(t.owner) : '',
+      t.owner ? 'owner: ' + esc(t.owner) : '',
       t.runCount ? `${t.runCount} run${t.runCount === 1 ? '' : 's'}` : '',
       t.durationMs ? fmtTime(t.durationMs / 1000) : '',
     ].filter(Boolean).join(' · ');
@@ -167,10 +167,10 @@
       `</div>${prioBadge}${statusBadge}` +
       `<div class="gr-row-actions">` +
       `<button class="btn" data-size="sm" data-run="${esc(k)}">Run</button>` +
-      `<button class="btn" data-size="sm" data-inputs="${esc(t.file)}" title="Make inputs dynamic">⌗</button>` +
-      `<button class="btn" data-size="sm" data-edit="${esc(k)}" title="Tag / priority / owner">🏷</button>` +
-      `<button class="btn" data-size="sm" data-rename="${esc(t.file)}" title="Rename file">✎</button>` +
-      `<button class="btn" data-size="sm" data-status="danger" data-del="${esc(t.file)}" title="Delete file">🗑</button>` +
+      `<button class="btn" data-size="sm" data-inputs="${esc(t.file)}" title="Make inputs dynamic" aria-label="Make inputs dynamic">Inputs</button>` +
+      `<button class="btn" data-size="sm" data-edit="${esc(k)}" title="Tag / priority / owner" aria-label="Edit tags, priority, owner">Tags</button>` +
+      `<button class="btn" data-size="sm" data-rename="${esc(t.file)}" title="Rename file" aria-label="Rename file">Rename</button>` +
+      `<button class="btn" data-size="sm" data-status="danger" data-del="${esc(t.file)}" title="Delete file" aria-label="Delete file">Delete</button>` +
       `</div>`;
     li.querySelector('.gr-row-sel').onchange = (e) => { e.target.checked ? selectedKeys.add(k) : selectedKeys.delete(k); updateRunSelected(); };
     li.querySelector('[data-run]').onclick = () => runOne(t);

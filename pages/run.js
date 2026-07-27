@@ -82,8 +82,14 @@
     return row;
   }
   const cleanTitle = (t) => String(t).replace(/\s*@[\w-]+/g, '').trim();
-  // The pass/fail/running/waiting glyph carries the signal on its own — no colour.
-  const statusMark = (status) => (status === 'passed' ? '✓' : status === 'failed' ? '✕' : status === 'running' ? '◐' : '○');
+  // The pass/fail/running/waiting glyph carries the signal on its own — no colour. role="img" +
+  // aria-label gives it a text accessible name so a screen reader announces "passed"/"failed"
+  // (the glyph alone is silent / read as a punctuation character).
+  const statusMark = (status) => {
+    const glyph = status === 'passed' ? '✓' : status === 'failed' ? '✕' : status === 'running' ? '◐' : '○';
+    const label = status === 'passed' ? 'passed' : status === 'failed' ? 'failed' : status === 'running' ? 'running' : 'not run';
+    return `<span class="statusmark" role="img" aria-label="${label}">${glyph}</span>`;
+  };
   // The login shown next to a checklist item: the "Run as" override if set, else the role baked
   // into that test. Blank for tests that don't log in.
   function roleLabel(title) {

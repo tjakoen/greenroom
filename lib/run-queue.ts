@@ -183,26 +183,11 @@ function claimNextQueued(): typeof run.$inferSelect | undefined {
 async function launch(row: typeof run.$inferSelect): Promise<void> {
   const scope = (row.scope ?? {}) as QueuedScope;
   const envs = scope.envs ?? [];
-  const scopedUser = resolveScopedUser(row.triggeredBy);
-  const runConfig = await buildRunConfig(scopedUser, envs, scope.role);
 
-  const result: StartRunResult = startRun(envs, !!scope.light, scope.files, scope.grep, scope.role, {
-    runId: row.id,
-    runConfig,
-    onDone: (info) => {
-      closeRow(row.id, info.status, info.artifactDir);
-      writeRunResults(row.id);
-      broadcastGlobal("done", { runId: row.id, status: info.status });
-      tick();
-    },
-  });
-
-  if (!result.ok) {
-    // Couldn't even start (e.g. an environment/file vanished between enqueue and its turn, or a
-    // recording is in progress) — never reaches "running" at all, so it's not "failed" (which
-    // implies tests actually ran) or "stopped" (which implies someone asked it to stop); "error".
-    console.warn(`[lib/run-queue.ts] run ${row.id} failed to start: ${result.error}`);
-    runConfig.cleanup();
+  // Settle a row that never actually reached a live "running" child to `error` and free its slot —
+  // not "failed" (implies tests ran) or "stopped" (implies someone asked). Also broadcasts done.
+  const settleError = (runConfig?: { cleanup: () => void }): void => {
+    try { runConfig?.cleanup(); } catch { /* best-effort */ }
     closeRow(row.id, "error");
     const handle = getRun(row.id);
     if (handle) {
@@ -210,6 +195,38 @@ async function launch(row: typeof run.$inferSelect): Promise<void> {
       broadcast(row.id, "done", publicState(row.id));
     }
     broadcastGlobal("done", publicState());
+  };
+
+  // claimNextQueued() already flipped this row to `running`. If resolveScopedUser/buildRunConfig/
+  // startRun THROW (a DB hiccup, a tmpdir write failure), that status would otherwise stick forever
+  // — countByStatus("running") keeps counting it, the concurrency slot is consumed, and the queue
+  // wedges until a restart runs reconcileOnBoot (audit #3). And because tick() fire-and-forgets
+  // runTick(), the throw would be an unhandled rejection. Catch it and settle the row to `error`.
+  let runConfig: Awaited<ReturnType<typeof buildRunConfig>> | undefined;
+  try {
+    const scopedUser = resolveScopedUser(row.triggeredBy);
+    runConfig = await buildRunConfig(scopedUser, envs, scope.role);
+
+    const result: StartRunResult = startRun(envs, !!scope.light, scope.files, scope.grep, scope.role, {
+      runId: row.id,
+      runConfig,
+      onDone: (info) => {
+        closeRow(row.id, info.status, info.artifactDir);
+        writeRunResults(row.id);
+        broadcastGlobal("done", { runId: row.id, status: info.status });
+        tick();
+      },
+    });
+
+    if (!result.ok) {
+      // Couldn't even start (e.g. an environment/file vanished between enqueue and its turn, or a
+      // recording is in progress) — never reaches "running", so settle to "error" and free the slot.
+      console.warn(`[lib/run-queue.ts] run ${row.id} failed to start: ${result.error}`);
+      settleError(runConfig);
+    }
+  } catch (err) {
+    console.error(`[lib/run-queue.ts] run ${row.id} threw during launch — settling to error:`, err);
+    settleError(runConfig);
   }
 }
 

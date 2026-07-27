@@ -11,8 +11,13 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Never rejects: a transport failure or a non-JSON body (a 302/500 HTML page) resolves to a
+  // defined {status,j} so every caller's status/notice() handling still runs instead of throwing
+  // an unhandled rejection that silently wedges the editor.
   const api = (path, opts) =>
-    fetch(path, opts).then((r) => r.json().then((j) => ({ status: r.status, j })));
+    fetch(path, opts)
+      .then((r) => r.json().then((j) => ({ status: r.status, j })).catch(() => ({ status: r.status, j: {} })))
+      .catch(() => ({ status: 0, j: { error: 'Network error — could not reach the server.' } }));
 
   const root = $('edRoot');
   const els = {

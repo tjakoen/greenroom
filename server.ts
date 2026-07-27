@@ -38,6 +38,7 @@ import {
   specFiles, recordedInputs, applyInputs,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
+import { canReadRun } from "./lib/run-scope.ts";
 import { startRun, stopRun as stopLegacy, killProc } from "./lib/runner.ts";
 import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue } from "./lib/run-queue.ts";
 import { startRecording } from "./lib/recorder.ts";
@@ -352,6 +353,23 @@ async function handle(req: Request): Promise<Response> {
     if (p2) return p2;
   }
 
+  // ---- run-artifact read scope (audit blocker #2, PLATFORM only) --------------------------------
+  // The raw artifact endpoints below resolve a run by id/dir and return its screenshots/video/logs/
+  // PDF/zip. Wall off a run that covered a `private` test the requester can't read (lib/run-scope.ts
+  // — company/team stay open per the doctrine; only private is a wall). One check up front covers
+  // every ?run=-keyed artifact endpoint regardless of where it's dispatched below. The POST /api/pdf
+  // (run in the body) and the /report + /runs/ static serves (run in the path) are guarded at their
+  // own handlers. Local/demo have no `user` → no scoping (single-user / read-only).
+  if (IS_PLATFORM && user) {
+    const RUN_ARTIFACT_QP = new Set([
+      "/api/pdf-data", "/api/pdf-image", "/api/moment", "/api/video", "/api/video-clip",
+      "/api/bug-summary", "/api/bug-bundle", "/api/results",
+    ]);
+    if (RUN_ARTIFACT_QP.has(p) && !canReadRun(user, qp.get("run"))) {
+      return json({ error: "forbidden" }, 403);
+    }
+  }
+
   // The single-doc guide is served at /guide by MILL (which lists it as /guide/user-guide).
   const millPath = p === "/guide" ? "/guide/user-guide" : p;
   const fromProof = await proofRoutes(p);
@@ -583,6 +601,7 @@ async function handle(req: Request): Promise<Response> {
   }
   if (p === "/api/pdf" && method === "POST") {
     const { run = "latest", test, i = 0, from, to } = await readBody(req);
+    if (IS_PLATFORM && user && !canReadRun(user, run)) return json({ ok: false, error: "forbidden" }, 403); // audit #2
     const found = findRecord(run, test);
     if (!found) return json({ ok: false, error: "Snapshot data not found." }, 404);
     try {
@@ -661,6 +680,7 @@ async function handle(req: Request): Promise<Response> {
   if (p.startsWith("/report")) {
     const dir = latestRunDir();
     if (!dir) return new Response("No test runs yet.", { status: 404 });
+    if (IS_PLATFORM && user && !canReadRun(user, basename(dir))) return new Response("Forbidden", { status: 403 }); // audit #2
     const rel = p === "/report" || p === "/report/" ? "index.html" : p.slice("/report/".length);
     const target = safeResolve(dir, decodeURIComponent(rel));
     if (!target) return new Response("Forbidden", { status: 403 });
@@ -668,6 +688,7 @@ async function handle(req: Request): Promise<Response> {
   }
   if (p.startsWith("/runs/")) {
     let rel = decodeURIComponent(p.slice("/runs/".length));
+    if (IS_PLATFORM && user && !canReadRun(user, rel.split("/")[0])) return new Response("Forbidden", { status: 403 }); // audit #2 (first path seg = run dir)
     if (rel === "" || rel.endsWith("/")) rel += "index.html";
     if (!rel.includes("/")) rel += "/index.html";
     const target = safeResolve(RUNS_DIR, rel);

@@ -109,8 +109,23 @@ the `SUPERADMIN_EMAIL`) becomes superadmin and can manage users/teams at `/admin
 
 Everything durable lives in two places — back both up:
 - **`data/greenroom.db`** (+ `-wal`/`-shm`) — accounts, teams, environments, credentials (encrypted),
-  tests, run metadata, audit log. This is a SQLite file: snapshot it with the SQLite online-backup
-  API or copy it while the app is stopped; for continuous backup consider a litestream-style tool.
+  tests, run metadata, audit log. Back it up with the bundled script — it uses SQLite `VACUUM INTO`
+  (a consistent, fully-checkpointed snapshot, safe to run against the **live** db; a raw file copy
+  under WAL can capture a torn state) and integrity-checks the result before reporting success:
+
+  ```
+  bun scripts/backup.ts                 # -> <db-dir>/backups/greenroom-<UTC-stamp>.db
+  bun scripts/backup.ts /mnt/backups    # or pass a directory / an explicit *.db path
+  ```
+
+  It honours `GREENROOM_DB_PATH` (backs up whatever volume the app runs against) and prunes to the
+  newest `GREENROOM_BACKUP_KEEP` (default 30). Schedule it from cron or a systemd timer — e.g. hourly:
+
+  ```
+  0 * * * * cd /srv/greenroom && GREENROOM_DB_PATH=/data/greenroom.db /usr/local/bin/bun scripts/backup.ts /data/backups >> /var/log/greenroom-backup.log 2>&1
+  ```
+
+  For continuous / point-in-time recovery, layer a litestream-style WAL shipper on top.
 - **`runs/`** — per-run artifacts (report, video, trace, screenshots). Large; can be treated as
   regenerable (re-run) if backup cost matters. Pruned to newest 30 / under 3 GB by default.
 

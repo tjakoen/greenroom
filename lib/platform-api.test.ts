@@ -91,3 +91,41 @@ test("a session unlocks the app but platform config writes stay locked (audit #1
   });
   expect(write.status).toBe(403); // PLATFORM_CONFIG_LOCKED
 });
+
+test("a non-owner is walled 403 from a PRIVATE run's artifacts, but not a company run (audit #2, HTTP path)", async () => {
+  // Seed one private + one company run straight into the server's db (a 2nd connection to the same
+  // file — WAL makes the committed writes visible to the live server). No artifact files are needed:
+  // canReadRun walls up front, before any disk read. This asserts the HTTP guard that run-scope.test
+  // covers only at the function level.
+  const { drizzle } = await import("drizzle-orm/bun-sqlite");
+  const { Database } = await import("bun:sqlite");
+  const schema = await import("../db/schema.ts");
+  const sq = new Database(DB);
+  sq.exec("PRAGMA foreign_keys = ON;");
+  const d = drizzle(sq, { schema });
+  d.insert(schema.test).values({ id: "priv-t", title: "Priv", filePath: "tests/priv.spec.ts", ownerId: "seed-owner", visibility: "private" }).run();
+  d.insert(schema.run).values({ id: "priv-run", envLabel: "e", status: "failed", triggeredBy: "seed-owner", artifactDir: "priv-dir" }).run();
+  d.insert(schema.runResult).values({ id: "priv-rr", runId: "priv-run", testId: "priv-t", env: "e", status: "failed" }).run();
+  d.insert(schema.test).values({ id: "comp-t", title: "Comp", filePath: "tests/comp.spec.ts", ownerId: "seed-owner", visibility: "company" }).run();
+  d.insert(schema.run).values({ id: "comp-run", envLabel: "e", status: "passed", triggeredBy: "seed-owner", artifactDir: "comp-dir" }).run();
+  d.insert(schema.runResult).values({ id: "comp-rr", runId: "comp-run", testId: "comp-t", env: "e", status: "passed" }).run();
+  sq.close();
+
+  // A reader account. The FIRST sign-up (the prior test) became superadmin; this later account is a
+  // normal, non-superadmin, non-owner user — the walled case (superadmin/triggerer would pass).
+  const su = await fetch(`${BASE}/api/auth/sign-up/email`, {
+    method: "POST",
+    headers: jsonHdr,
+    body: JSON.stringify({ email: `reader-${process.pid}@example.com`, password: "integration-pw-123", name: "Reader" }),
+  });
+  expect(su.status).toBe(200);
+  const cookie = su.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  expect(cookie.length).toBeGreaterThan(0);
+
+  // Walled from the private run — addressed by artifactDir AND by run id (both resolve to one row).
+  expect((await fetch(`${BASE}/api/results?run=priv-dir`, { headers: { cookie } })).status).toBe(403);
+  expect((await fetch(`${BASE}/api/results?run=priv-run`, { headers: { cookie } })).status).toBe(403);
+  // The wall is selective: a company-visibility run clears the scope guard (it may 404 for missing
+  // artifact files on disk, but the point is it is NOT 403).
+  expect((await fetch(`${BASE}/api/results?run=comp-dir`, { headers: { cookie } })).status).not.toBe(403);
+});

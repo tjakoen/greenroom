@@ -66,6 +66,7 @@ Set these in the process environment (systemd unit, container env, etc.) — nev
 | `SUPERADMIN_EMAIL` | recommended | The email that becomes superadmin on first login. Otherwise the first-ever user is promoted. |
 | `COMPANY_NAME` | — | Name of the default organization (cosmetic; default `"Company"`). |
 | `GR_MAX_PARALLEL_RUNS` | — | Concurrent Playwright runs (default 2 — browsers are RAM-heavy; raise with headroom). |
+| `GREENROOM_DB_PATH` | — | Override the SQLite file location (default `data/greenroom.db`). Point at a managed/persistent volume in a container deploy so the DB survives redeploys. |
 | `GREENROOM_DEMO` | — | `1` = read-only demo mode (no accounts, seeded data). Not for a real deployment. |
 
 Entra SSO (deferred — email/password works without it): register an app in your company's

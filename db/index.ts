@@ -20,7 +20,9 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import * as schema from "./schema";
 
-const DB_PATH = `${import.meta.dir}/../data/greenroom.db`;
+// Default location is data/greenroom.db next to the repo; GREENROOM_DB_PATH overrides it (a
+// deployment can point at a managed volume, and tests point at a throwaway file / :memory:).
+const DB_PATH = process.env.GREENROOM_DB_PATH || `${import.meta.dir}/../data/greenroom.db`;
 
 let _sqlite: Database | null = null;
 let _db: BunSQLiteDatabase<typeof schema> | null = null;

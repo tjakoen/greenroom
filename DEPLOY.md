@@ -15,8 +15,16 @@ people use at once. This file is the deploy runbook.
 What the platform already enforces (all opt-in via env, defaults unchanged for local):
 - **Auth on every route** — better-auth sessions; unauthenticated page → 302 `/login`, API → 401.
   Cookies are `httpOnly` + `sameSite=lax`, and **Secure** when `BETTER_AUTH_URL` is `https://`.
-- **Host + CSRF allowlist** — `lib/guard.ts` serves only `ALLOWED_HOSTS` (+ loopback) and rejects
-  cross-origin writes; better-auth `trustedOrigins` gates CSRF + SSO redirects to the same hosts.
+- **Host + CSRF allowlist** — `lib/guard.ts` serves only `ALLOWED_HOSTS` (+ genuine loopback) and
+  rejects cross-origin writes; on a deployment an empty/missing `Host` (or a raw `0.0.0.0`) is
+  rejected, not waved through. better-auth `trustedOrigins` gates CSRF + SSO redirects to the same hosts.
+- **Private-run artifact wall** — a run that covered a `private` test walls its saved artifacts AND
+  its live stream/state/history metadata to non-owners (`lib/run-scope.ts` `canReadRun`); `?run=latest`
+  resolves to the concrete newest run and is walled the same. Stopping a run is owner/superadmin-only
+  (`canControlRun`). The `/api/queue` + `/api/runs` listings are scoped to the caller.
+- **Run isolation** — the Playwright child never inherits `SECRET_KEY`/`BETTER_AUTH_SECRET` (a
+  user-authored spec can't exfiltrate them via its streamed output). The queue caps in-flight runs
+  (global + per-user) and force-stops a run past `GR_RUN_TIMEOUT_MS` so it can't wedge a slot.
 - **Rate limiting** — 120 req/min global, 10/min on `sign-in`/`sign-up` (credential brute-force).
   Behind a proxy the app resolves the client IP from `x-forwarded-for` (only when `ALLOWED_HOSTS`
   is set) so the limit is per-client, not one shared bucket. **This is only safe if the proxy
@@ -34,7 +42,12 @@ Residual risk / must-do before exposure (do NOT skip):
   multi-instance deploy needs a shared store, or each instance limits independently.
 - **No independent security audit yet** — pen-test / review before any broader exposure.
 - **Company-open scoping by design** — everyone can read `company`-visibility resources; scoping is
-  for organization + accountability, not a hard wall between teammates (plans/platform.md §0).
+  for organization + accountability, not a hard wall between teammates (plans/platform.md §0). Note a
+  run using a `private`/`team` credential against a `company` test can still surface that credential
+  in the run's screenshots/logs to any reader — keep sensitive-cred tests `private`.
+- **Restrict registration** — sign-up is open by default. On a public instance set
+  `GREENROOM_DISABLE_SIGNUP=1` or `SIGNUP_ALLOWED_DOMAINS` so anonymous visitors can't self-register
+  (the first-ever user is auto-promoted to superadmin — set `SUPERADMIN_EMAIL` too).
 
 ## Prerequisites
 
@@ -48,11 +61,14 @@ Residual risk / must-do before exposure (do NOT skip):
 
 Set these in the process environment (systemd unit, container env, etc.) — never commit them.
 
-> **Fail-closed:** when `ALLOWED_HOSTS` is set (a real deployment), the app **refuses to boot** if
-> `BETTER_AUTH_SECRET` or `SECRET_KEY` is unset, or if `BETTER_AUTH_URL` is not `https://` — it will
-> not silently fall back to the dev session secret / dev encryption key / non-Secure cookies. Fix the
-> reported vars and restart. (A local platform run without `ALLOWED_HOSTS` still tolerates the dev
-> fallbacks.)
+> **Fail-closed:** the app treats an instance as a *deployment* when **either** `ALLOWED_HOSTS` is
+> set **or** `HOST` is bound to a non-loopback address (e.g. `0.0.0.0`) — i.e. anything reachable
+> off-box. In that state it **refuses to boot** if `BETTER_AUTH_SECRET` or `SECRET_KEY` is unset (or
+> whitespace-only), or if `BETTER_AUTH_URL` is not `https://` — no silent fallback to the dev session
+> secret / dev encryption key / non-Secure cookies. It also **refuses** to bind a non-loopback `HOST`
+> in the LOCAL edition (a public bind must run the platform edition, with its session gate + config
+> lock) and refuses to expose `GREENROOM_DEMO` on a network interface (demo has no auth). A purely
+> loopback local-platform dev run still tolerates the dev fallbacks. Fix the reported vars and restart.
 
 | Var | Required for deploy | What it does |
 |---|---|---|
@@ -66,6 +82,11 @@ Set these in the process environment (systemd unit, container env, etc.) — nev
 | `SUPERADMIN_EMAIL` | recommended | The email that becomes superadmin on first login. Otherwise the first-ever user is promoted. |
 | `COMPANY_NAME` | — | Name of the default organization (cosmetic; default `"Company"`). |
 | `GR_MAX_PARALLEL_RUNS` | — | Concurrent Playwright runs (default 2 — browsers are RAM-heavy; raise with headroom). |
+| `GR_MAX_QUEUED` | — | Global admission cap on in-flight (queued+running) runs (default 200). Rejects further `/api/run` with 429 — bounds memory/DB against a run-flood. |
+| `GR_MAX_QUEUED_PER_USER` | — | Per-user in-flight run cap (default 20). One user can't monopolise the queue. |
+| `GR_RUN_TIMEOUT_MS` | — | Wall-clock ceiling per run before the queue force-stops it (default 1800000 = 30 min). Stops a hung child wedging a concurrency slot. |
+| `GREENROOM_DISABLE_SIGNUP` | recommended | `1` disables self-service email/password sign-up (create users via admin). Prevents anonymous registration on a public instance. |
+| `SIGNUP_ALLOWED_DOMAINS` | recommended | Comma-separated email domains allowed to register, e.g. `example.com`. Empty → any domain (open). Enforced on every create path. |
 | `GREENROOM_DB_PATH` | — | Override the SQLite file location (default `data/greenroom.db`). Point at a managed/persistent volume in a container deploy so the DB survives redeploys. |
 | `GREENROOM_DEMO` | — | `1` = read-only demo mode (no accounts, seeded data). Not for a real deployment. |
 

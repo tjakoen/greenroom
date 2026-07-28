@@ -10,7 +10,7 @@
 // instances) — `tick()`'s own re-entrancy guard (`ticking`) is therefore the only lock this needs;
 // two requests racing to enqueue/stop/finish never interleave `tick`'s own body, only ever queue
 // up a re-run of it (`pendingTick`) once the in-flight one finishes.
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, and, inArray } from "drizzle-orm";
 import { db } from "../db/index.ts";
 import { run, runResult, test, type RunScope } from "../db/schema.ts";
 import { resolveScopedUser } from "../auth/index.ts";
@@ -25,6 +25,34 @@ import { basename } from "node:path";
 function cap(): number {
   const n = Number(process.env.GR_MAX_PARALLEL_RUNS ?? 2);
   return Number.isFinite(n) && n > 0 ? n : 2;
+}
+
+/** Admission control (audit: unbounded queue depth → memory/DB exhaustion DoS). A queued row pins
+ *  an in-memory RunHandle (never evicted while queued, run-stream.ts) + a DB row, and only `cap()`
+ *  ever drain at once — so without a ceiling one client firing thousands of POST /api/run grows
+ *  both without bound. Cap total in-flight (queued+running) globally and per user. Env-tunable. */
+function maxQueued(): number {
+  const n = Number(process.env.GR_MAX_QUEUED ?? 200);
+  return Number.isFinite(n) && n > 0 ? n : 200;
+}
+function maxQueuedPerUser(): number {
+  const n = Number(process.env.GR_MAX_QUEUED_PER_USER ?? 20);
+  return Number.isFinite(n) && n > 0 ? n : 20;
+}
+
+/** Wall-clock ceiling for a single run before the queue force-stops it (audit: a hung child that
+ *  never emits 'close' otherwise wedges a concurrency slot forever). 0/invalid disables. */
+function runTimeoutMs(): number {
+  const n = Number(process.env.GR_RUN_TIMEOUT_MS ?? 30 * 60 * 1000);
+  return Number.isFinite(n) && n > 0 ? n : 30 * 60 * 1000;
+}
+
+/** Thrown by enqueueRun when the queue is at capacity — server.ts maps it to HTTP 429. */
+export class QueueFullError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QueueFullError";
+  }
 }
 
 // The scope shape a queued row's `run.scope` json column carries — a superset of db/schema.ts's
@@ -71,6 +99,20 @@ export async function enqueueRun(params: EnqueueParams): Promise<EnqueueResult> 
   // Snapshot ahead-of-me counts BEFORE inserting this row (so this row isn't counted against itself).
   const runningCount = countByStatus("running");
   const queuedAhead = countByStatus("queued");
+
+  // Admission control — reject rather than grow the queue/handle-map without bound.
+  const inFlight = runningCount + queuedAhead;
+  if (inFlight >= maxQueued()) {
+    throw new QueueFullError(`The run queue is full (${inFlight} in flight). Try again once some runs finish.`);
+  }
+  const mineInFlight = db
+    .select({ id: run.id })
+    .from(run)
+    .where(and(eq(run.triggeredBy, params.userId), inArray(run.status, ["queued", "running"])))
+    .all().length;
+  if (mineInFlight >= maxQueuedPerUser()) {
+    throw new QueueFullError(`You already have ${mineInFlight} runs queued or running. Wait for some to finish before starting more.`);
+  }
 
   const scope: QueuedScope = { envs, files: params.files, grep: params.grep, role: params.role, light: !!params.light };
   const [row] = await db
@@ -207,16 +249,27 @@ async function launch(row: typeof run.$inferSelect): Promise<void> {
     const scopedUser = resolveScopedUser(row.triggeredBy);
     runConfig = await buildRunConfig(scopedUser, envs, scope.role);
 
+    // Watchdog: force-stop a run that outlives the ceiling so a hung child (never emits 'close')
+    // can't pin its concurrency slot forever and wedge the whole queue. Cleared on natural done.
+    let watchdog: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+      watchdog = undefined;
+      console.warn(`[lib/run-queue.ts] run ${row.id} exceeded ${runTimeoutMs()}ms — force-stopping (watchdog).`);
+      try { stopRunHandle(row.id); } catch { /* best-effort; onDone will still fire on kill */ }
+    }, runTimeoutMs());
+
     const result: StartRunResult = startRun(envs, !!scope.light, scope.files, scope.grep, scope.role, {
       runId: row.id,
       runConfig,
       onDone: (info) => {
+        if (watchdog) { clearTimeout(watchdog); watchdog = undefined; }
         closeRow(row.id, info.status, info.artifactDir);
         writeRunResults(row.id);
         broadcastGlobal("done", { runId: row.id, status: info.status });
         tick();
       },
     });
+
+    if (!result.ok && watchdog) { clearTimeout(watchdog); watchdog = undefined; }
 
     if (!result.ok) {
       // Couldn't even start (e.g. an environment/file vanished between enqueue and its turn, or a

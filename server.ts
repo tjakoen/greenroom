@@ -38,9 +38,9 @@ import {
   specFiles, recordedInputs, applyInputs,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
-import { canReadRun } from "./lib/run-scope.ts";
+import { canReadRun, canControlRun } from "./lib/run-scope.ts";
 import { startRun, stopRun as stopLegacy, killProc } from "./lib/runner.ts";
-import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue } from "./lib/run-queue.ts";
+import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue, QueueFullError } from "./lib/run-queue.ts";
 import { startRecording } from "./lib/recorder.ts";
 import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
 import { buildPdf } from "./lib/pdf.ts";
@@ -464,6 +464,9 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/api/state") {
     const run = qp.get("run");
     if (run) {
+      // A per-run status feed leaks the same private-test signal the artifact wall protects
+      // (result/test titles of a private run) — scope it in platform (audit: unguarded ?run= feeds).
+      if (IS_PLATFORM && user && !canReadRun(user, run)) return json({ error: "forbidden" }, 403);
       const st = publicState(run);
       return st ? json(st) : json({ error: "Unknown run." }, 404);
     }
@@ -515,18 +518,35 @@ async function handle(req: Request): Promise<Response> {
       return json(res, res.ok ? 200 : 409);
     }
     if (!user) return json({ error: "unauthenticated" }, 401); // belt-and-suspenders — the session gate above already guarantees this in platform mode
-    const { runId, position } = await enqueueRun({ userId: user.id, envs: envList, files, grep, role, light: !!light });
-    return json({ ok: true, runId, position });
+    try {
+      const { runId, position } = await enqueueRun({ userId: user.id, envs: envList, files, grep, role, light: !!light });
+      return json({ ok: true, runId, position });
+    } catch (err: any) {
+      if (err instanceof QueueFullError) return json({ ok: false, error: err.message }, 429);
+      throw err;
+    }
   }
   // Gate D: /api/queue — every currently queued/running row + its position, for the Run page to
   // poll. PLATFORM only (the queue is db-backed); the LOCAL edition never queues, so it's empty.
-  if (p === "/api/queue" && method === "GET") return json({ ok: true, queue: IS_PLATFORM ? listQueue() : [] });
+  if (p === "/api/queue" && method === "GET") {
+    // Scope to the caller's own runs (superadmin sees all) — the raw list exposes every user's
+    // runId + triggeredBy + envLabel, which is the enumeration primitive for the ?run= reads/stops.
+    const q = IS_PLATFORM ? listQueue() : [];
+    const scoped = IS_PLATFORM && user && !user.isSuperadmin ? q.filter((r) => r.triggeredBy === user.id) : q;
+    return json({ ok: true, queue: scoped });
+  }
   // Gate B/D: ?run=<runId> stops that specific run (queued -> never starts; running -> killed) via
   // the queue (platform); otherwise the legacy stop (stop an in-flight recording, or whatever
   // lib/runner.ts's own map thinks is "the active run" — the only path in the LOCAL edition).
   if (p === "/api/stop" && method === "POST") {
     const runParam = qp.get("run");
-    return okOr(IS_PLATFORM && runParam ? stopQueuedRun(runParam) : stopLegacy(undefined), 409);
+    // Stopping another user's run is cross-user tampering/DoS — only its triggerer or a superadmin
+    // may (canControlRun, fail-closed). Local has no accounts, so it keeps the legacy single-run stop.
+    if (IS_PLATFORM && runParam) {
+      if (user && !canControlRun(user, runParam)) return json({ ok: false, error: "forbidden" }, 403);
+      return okOr(stopQueuedRun(runParam), 409);
+    }
+    return okOr(stopLegacy(undefined), 409);
   }
   if (p === "/api/record" && method === "POST") {
     const { env, name, role } = await readBody(req);
@@ -546,13 +566,21 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/api/stream") {
     const run = qp.get("run");
     if (run) {
+      // The live stream replays a run's buffered stdout — which for a private test can include the
+      // app-under-test's credential entry, exactly what the saved-artifact wall protects. Scope it.
+      if (IS_PLATFORM && user && !canReadRun(user, run)) return new Response("Forbidden", { status: 403 });
       const stream = runStream(run);
       return stream ?? new Response("Unknown run.", { status: 404 });
     }
     return runStream();
   }
 
-  if (p === "/api/runs") return json(listRuns());
+  // Scope the run history in platform: listRuns() leaks every run's dir/env/pass-fail (metadata of
+  // private runs + the dir names that key the artifact reads). Filter to runs the caller may read.
+  if (p === "/api/runs") {
+    const runs = listRuns();
+    return json(IS_PLATFORM && user && !user.isSuperadmin ? runs.filter((r: any) => canReadRun(user, r.id)) : runs);
+  }
 
   // ---- snapshots / PDF / video ----
   if (p === "/api/pdf-data") {
@@ -704,24 +732,54 @@ async function handle(req: Request): Promise<Response> {
 // ownership" box): better-auth's own runner creates its tables first, then drizzle's migrate()
 // creates ours. Runs every boot; both are no-ops once the schema is current. Top-level await is
 // fine under bun.
-// Fail closed on a real deployment (audit #4 — no silent security downgrades). ALLOWED_HOSTS set =
-// internet-exposed behind a proxy, so the dev fallbacks (auth/index.ts DEV_SECRET_FALLBACK →
-// forgeable sessions; lib/secret.ts dev key → publicly-known cred encryption; http → no Secure
-// cookie) MUST NOT apply. Refuse to boot rather than come up quietly insecure. A local-platform dev
-// run (GREENROOM_MODE=platform, no ALLOWED_HOSTS) still tolerates the fallbacks.
-if (process.env.ALLOWED_HOSTS) {
-  const missing = ["BETTER_AUTH_SECRET", "SECRET_KEY"].filter((k) => !process.env[k]);
-  const problems = missing.map((k) => `${k} is unset`);
-  if (!(process.env.BETTER_AUTH_URL || "").startsWith("https://")) {
-    problems.push("BETTER_AUTH_URL must be an https:// URL (Secure cookies)");
-  }
-  if (problems.length) {
-    console.error(
-      "Refusing to start a deployed instance (ALLOWED_HOSTS is set) with insecure config:\n" +
-        problems.map((p) => `  • ${p}`).join("\n") +
-        "\nSet these in the environment (see DEPLOY.md) and restart.",
-    );
+// Fail closed on a real deployment (audit #4 — no silent security downgrades). A "deployment" is
+// anything network-reachable, which is TWO independent facts the old guard conflated with only
+// ALLOWED_HOSTS:
+//   • ALLOWED_HOSTS set → served behind a proxy on a real domain (proxy binds us on loopback), OR
+//   • HOST bound to a non-loopback interface (e.g. 0.0.0.0) → directly reachable.
+// Either way the dev fallbacks (auth DEV_SECRET_FALLBACK → forgeable sessions; secret.ts dev key →
+// publicly-known cred encryption; http → no Secure cookie) MUST NOT apply. A purely loopback
+// local-platform dev run (GREENROOM_MODE=platform, HOST unset, no ALLOWED_HOSTS) still tolerates them.
+{
+  const boundHost = process.env.HOST ?? "127.0.0.1";
+  // A BIND address is loopback-only ONLY for the true loopback names — note 0.0.0.0 means "all
+  // interfaces" (network-exposed) here, the OPPOSITE of isLoopbackHost()'s Host-header semantics
+  // (which treats 0.0.0.0 as loopback for anti-DNS-rebinding). So test the bind explicitly.
+  const bindLoopbackOnly = ["127.0.0.1", "localhost", "::1", "[::1]"].includes(boundHost.trim().toLowerCase());
+  const networkExposed = !bindLoopbackOnly; // 0.0.0.0 / a real IP / a hostname → reachable off-box
+  const deployed = !!process.env.ALLOWED_HOSTS || networkExposed;
+
+  // Demo is a read-only LOCAL variant with NO session gate (lib/paths.ts IS_PLATFORM is false in
+  // demo) — it must never be put on a public interface. Refuse rather than serve unauthenticated.
+  if (deployed && IS_DEMO) {
+    console.error("Refusing to expose DEMO mode on a network interface — demo has no authentication. Drop GREENROOM_DEMO or bind loopback only.");
     process.exit(1);
+  }
+  // A network-reachable instance MUST be the platform edition (accounts + session gate + config
+  // lock). Binding a non-loopback HOST in the local edition would expose the unlocked flat-file
+  // config writers and every route with no auth.
+  if (networkExposed && !IS_PLATFORM) {
+    console.error(`Refusing to bind a non-loopback HOST (${boundHost}) in the local edition — a network-exposed instance must run the platform edition (set GREENROOM_MODE=platform + secrets, see DEPLOY.md).`);
+    process.exit(1);
+  }
+  if (deployed) {
+    // `.trim()` matches lib/secret.ts / auth's own emptiness test — a whitespace-only SECRET_KEY
+    // ("SECRET_KEY= " from a secrets manager) must NOT pass here and then silently fall back to the
+    // publicly-known dev key at runtime.
+    const problems = ["BETTER_AUTH_SECRET", "SECRET_KEY"]
+      .filter((k) => !(process.env[k] || "").trim())
+      .map((k) => `${k} is unset`);
+    if (!(process.env.BETTER_AUTH_URL || "").startsWith("https://")) {
+      problems.push("BETTER_AUTH_URL must be an https:// URL (Secure cookies)");
+    }
+    if (problems.length) {
+      console.error(
+        "Refusing to start a network-exposed instance with insecure config:\n" +
+          problems.map((pr) => `  • ${pr}`).join("\n") +
+          "\nSet these in the environment (see DEPLOY.md) and restart.",
+      );
+      process.exit(1);
+    }
   }
 }
 

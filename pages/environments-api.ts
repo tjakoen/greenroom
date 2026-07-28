@@ -27,7 +27,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { db } from "../db/index.ts";
 import { environment, type LoginFormConfig, type Visibility } from "../db/schema.ts";
-import { canWrite, filterReadable, type ScopedUser } from "../lib/scope.ts";
+import { canWrite, canRescope, filterReadable, parseVisibility, resolveTeamId, type ScopedUser } from "../lib/scope.ts";
 import { writeAudit } from "../lib/audit.ts";
 import { saveEnv, deleteEnv as deleteUrlsEnv, isValidEnvName } from "../lib/envs.ts";
 import { ROOT, IS_DEMO } from "../lib/paths.ts";
@@ -122,9 +122,11 @@ async function createEnvironment(ctx: ApiCtx): Promise<Response> {
     return json({ ok: false, error: `An environment named "${name}" already exists.` }, 409);
   }
 
-  const visibility: Visibility =
-    body?.visibility === "private" || body?.visibility === "team" ? body.visibility : "company";
-  const teamId: string | null = visibility === "team" && body?.teamId ? String(body.teamId) : null;
+  const visibility: Visibility = body?.visibility === undefined ? "company" : (parseVisibility(body.visibility) ?? "invalid" as Visibility);
+  if ((visibility as string) === "invalid") return json({ ok: false, error: "visibility must be private, team, or company" }, 400);
+  const teamRes = resolveTeamId(user, visibility, body?.teamId);
+  if ("error" in teamRes) return json({ ok: false, error: teamRes.error }, 400);
+  const teamId = teamRes.teamId;
   const loginForm: LoginFormConfig | null = body?.loginForm && typeof body.loginForm === "object" ? body.loginForm : null;
   // The very first environment ever created becomes the default (mirrors saveEnv's own
   // "isFirst" behavior for urls.json) — a fresh DB must never end up with zero defaults.
@@ -179,12 +181,21 @@ async function updateEnvironment(ctx: ApiCtx): Promise<Response> {
     }
   }
 
-  const visibility: Visibility =
-    body?.visibility === "private" || body?.visibility === "team" || body?.visibility === "company"
-      ? body.visibility
-      : existing.visibility;
-  const teamId: string | null =
-    body?.teamId !== undefined ? (body.teamId ? String(body.teamId) : null) : existing.teamId;
+  let visibility: Visibility = existing.visibility;
+  if (body?.visibility !== undefined) {
+    const v = parseVisibility(body.visibility);
+    if (!v) return json({ ok: false, error: "visibility must be private, team, or company" }, 400);
+    visibility = v;
+  }
+  let teamId: string | null = existing.teamId;
+  if (body?.teamId !== undefined || visibility !== existing.visibility) {
+    const teamRes = resolveTeamId(user, visibility, body?.teamId !== undefined ? body.teamId : existing.teamId);
+    if ("error" in teamRes) return json({ ok: false, error: teamRes.error }, 400);
+    teamId = teamRes.teamId;
+  }
+  if ((visibility !== existing.visibility || teamId !== existing.teamId) && !canRescope(user, existing)) {
+    return json({ ok: false, error: "only the owner or a superadmin can change a resource's visibility or team" }, 403);
+  }
   const loginForm: LoginFormConfig | null =
     body?.loginForm !== undefined ? (body.loginForm && typeof body.loginForm === "object" ? body.loginForm : null) : existing.loginForm ?? null;
   const isDefault = body?.isDefault !== undefined ? !!body.isDefault : existing.isDefault;

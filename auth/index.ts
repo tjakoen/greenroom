@@ -63,11 +63,27 @@ const IP_ADDRESS = IS_DEPLOYED ? { ipAddressHeaders: ["x-forwarded-for"] } : und
 // A pure factory so `ReturnType<typeof makeAuth>` keeps better-auth's fully-inferred, plugin-
 // augmented type (auth.api.listUsers/setRole/createTeam/… come from the admin + organization
 // plugins). Only CALLED lazily by buildAuth() — never at import — so the db stays closed in local.
+// Open-registration controls (audit: a public deploy otherwise lets any anonymous visitor
+// self-register a company-visibility account, and the first one becomes superadmin). Opt-in:
+//   • GREENROOM_DISABLE_SIGNUP=1     → no self-service sign-up at all (create users via admin).
+//   • SIGNUP_ALLOWED_DOMAINS=a.com,b.com → only these email domains may register.
+// Unset → today's open behavior (fine for loopback/local-platform dev). A deployed instance should
+// set at least one (see DEPLOY.md).
+const DISABLE_SIGNUP = process.env.GREENROOM_DISABLE_SIGNUP === "1";
+const SIGNUP_ALLOWED_DOMAINS = String(process.env.SIGNUP_ALLOWED_DOMAINS || "")
+  .split(",").map((d) => d.trim().toLowerCase().replace(/^@/, "")).filter(Boolean);
+function emailDomainAllowed(email: string): boolean {
+  if (!SIGNUP_ALLOWED_DOMAINS.length) return true;
+  const domain = email.toLowerCase().split("@")[1] ?? "";
+  return SIGNUP_ALLOWED_DOMAINS.includes(domain);
+}
+
 function makeAuth() {
   return betterAuth({
   database: openSqlite(),
   emailAndPassword: {
     enabled: true,
+    disableSignUp: DISABLE_SIGNUP,
   },
   // Superadmin promotion + org/team auto-join (plans/platform.md §2). better-auth runs plugin
   // databaseHooks first, then this top-level `databaseHooks` LAST (verified by reading
@@ -81,6 +97,12 @@ function makeAuth() {
       create: {
         async before(user) {
           const email = String((user as { email?: unknown }).email ?? "");
+          // Enforce the email-domain allowlist (if configured) at the last gate before insert — the
+          // admin-created-user path flows through here too, so an out-of-domain account can't be
+          // created by any route while the allowlist is on.
+          if (!emailDomainAllowed(email)) {
+            throw new Error(`Registration is restricted to: ${SIGNUP_ALLOWED_DOMAINS.join(", ")}`);
+          }
           // FIRST user ever created also becomes superadmin (bootstrap safety net) so a fresh
           // deploy is never stuck with zero admins if SUPERADMIN_EMAIL wasn't set in time.
           // countUsers() reads the table BEFORE this insert, so the very first sign-up sees 0.

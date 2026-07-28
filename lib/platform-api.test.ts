@@ -263,6 +263,11 @@ test("the run queue: enqueue is authed, keyed + subscribable immediately, and se
   expect(st?.status).toBeDefined();
   expect(["queued", "running"]).not.toContain(st!.status);
 
-  // Stopping an unknown run is a clean 409, not a 500.
-  expect(status(await fetch(`${BASE}/api/stop?run=does-not-exist`, { method: "POST", headers: { ...jsonHdr, cookie } }))).toBe(409);
+  // Stopping an unknown run is a clean 403 (canControlRun fails closed — a non-owner/unknown run is
+  // refused, same response as someone else's run so it's not an existence oracle), not a 500.
+  expect(status(await fetch(`${BASE}/api/stop?run=does-not-exist`, { method: "POST", headers: { ...jsonHdr, cookie } }))).toBe(403);
+
+  // The run's own triggerer CAN stop it (already terminal here → 409 "not active", not 403) — proves
+  // canControlRun lets the owner through rather than blanket-forbidding.
+  expect(status(await fetch(`${BASE}/api/stop?run=${runId}`, { method: "POST", headers: { ...jsonHdr, cookie } }))).toBe(409);
 });

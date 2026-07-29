@@ -10,7 +10,7 @@ let canControlRun: (u: ScopedUser, runParam: string | null | undefined) => boole
 
 beforeAll(async () => {
   const { runAppMigrations, db } = await import("../db/index.ts");
-  const { run, runResult, test: testTable } = await import("../db/schema.ts");
+  const { run, runResult, test: testTable, credential } = await import("../db/schema.ts");
   ({ canReadRun, canControlRun } = await import("./run-scope.ts"));
 
   runAppMigrations();
@@ -25,6 +25,18 @@ beforeAll(async () => {
   db.insert(testTable).values({ id: "t-comp", title: "Comp", filePath: "tests/c.spec.ts", ownerId: "userA", visibility: "company" }).run();
   db.insert(run).values({ id: "r2", envLabel: "e", status: "passed", triggeredBy: "userA", artifactDir: "runs/d2", finishedAt: new Date(1_000) }).run();
   db.insert(runResult).values({ id: "rr2", runId: "r2", testId: "t-comp", env: "e", status: "passed" }).run();
+
+  // Follow-up B (file-scope wall): a private test whose run_result did NOT link (title drift), but
+  // whose spec FILE the run explicitly targeted via scope.files → must still wall a non-owner.
+  db.insert(testTable).values({ id: "t-privB", title: "PrivB", filePath: "tests/pb.spec.ts", ownerId: "userA", visibility: "private" }).run();
+  db.insert(run).values({ id: "r3", envLabel: "e", status: "passed", triggeredBy: "userA", artifactDir: "runs/d3", finishedAt: new Date(500), scope: { files: ["tests/pb.spec.ts"] } }).run();
+  db.insert(runResult).values({ id: "rr3", runId: "r3", testId: "t-comp", env: "e", status: "passed" }).run(); // links only to the COMPANY test
+
+  // Follow-up A (credential-scope wall): a company test run, but the child was handed userA's
+  // PRIVATE credential (recorded on scope.credentialIds) → wall a non-owner.
+  db.insert(credential).values({ id: "cred-priv", label: "priv", username: "u", secretEnc: "g2:x", ownerId: "userA", visibility: "private" }).run();
+  db.insert(run).values({ id: "r4", envLabel: "e", status: "passed", triggeredBy: "userA", artifactDir: "runs/d4", finishedAt: new Date(400), scope: { credentialIds: ["cred-priv"] } }).run();
+  db.insert(runResult).values({ id: "rr4", runId: "r4", testId: "t-comp", env: "e", status: "passed" }).run();
 });
 
 afterAll(() => {
@@ -53,6 +65,18 @@ test("superadmin reads any run", () => {
 
 test("company-visibility run stays open to everyone", () => {
   expect(canReadRun(B, "d2")).toBe(true);
+});
+
+test("file-scope wall: a run targeting a private spec file walls a non-owner even if run_result didn't link it", () => {
+  expect(canReadRun(B, "d3")).toBe(false); // scope.files -> private tests/pb.spec.ts
+  expect(canReadRun(A, "d3")).toBe(true); // owner
+  expect(canReadRun(SA, "d3")).toBe(true); // superadmin
+});
+
+test("credential-scope wall: a run handed a private credential walls a non-owner", () => {
+  expect(canReadRun(B, "d4")).toBe(false); // scope.credentialIds -> userA's private cred
+  expect(canReadRun(A, "d4")).toBe(true);
+  expect(canReadRun(SA, "d4")).toBe(true);
 });
 
 test("unknown run selector falls back to allow (never breaks the normal flow)", () => {

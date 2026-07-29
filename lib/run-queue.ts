@@ -61,6 +61,10 @@ export class QueueFullError extends Error {
 interface QueuedScope extends RunScope {
   role?: string;
   light?: boolean;
+  /** The non-company credential row ids this run's child was handed (buildRunConfig) — persisted so
+   *  lib/run-scope.ts can wall the run's artifacts from anyone who can't read those creds (a private
+   *  login can end up in the captured screenshots/network of an otherwise company-visible run). */
+  credentialIds?: string[];
 }
 
 export interface EnqueueParams {
@@ -248,6 +252,13 @@ async function launch(row: typeof run.$inferSelect): Promise<void> {
   try {
     const scopedUser = resolveScopedUser(row.triggeredBy);
     runConfig = await buildRunConfig(scopedUser, envs, scope.role);
+
+    // Record the non-company creds handed to this run so the artifact wall (lib/run-scope.ts) can
+    // scope its captured output to anyone who can read those creds — a private login can surface in
+    // the run's screenshots/network even when the test itself is company-visible.
+    if (runConfig.credentialIds.length) {
+      db.update(run).set({ scope: { ...scope, credentialIds: runConfig.credentialIds } }).where(eq(run.id, row.id)).run();
+    }
 
     // Watchdog: force-stop a run that outlives the ceiling so a hung child (never emits 'close')
     // can't pin its concurrency slot forever and wedge the whole queue. Cleared on natural done.

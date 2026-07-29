@@ -7,14 +7,19 @@
 //
 // Doctrine (lib/scope.ts / plans §4): the company is internal and everyone reads `company`/`team`
 // by default — the ONLY hard wall is `private`. So this check is deliberately narrow: it walls off
-// a run ONLY when that run covered a `private` test the requester can't read. Superadmin and the
-// user who triggered the run always pass. Anything we can't resolve to a DB row (legacy/imported
-// runs, a "latest"/blank selector) falls back to ALLOW, so the guard only ever tightens the
-// genuinely-private case and never breaks the normal (company-visibility) bug-report/history flow.
-import { eq, or, desc, isNotNull } from "drizzle-orm";
+// a run when the requester can't read something that run exposed — a `private` TEST it covered (by
+// run_result linkage AND, belt-and-suspenders, by the run's scoped spec files), OR a non-company
+// CREDENTIAL its child was handed (a private login can surface in the captured screenshots/network
+// of an otherwise company-visible run). Superadmin and the user who triggered the run always pass.
+// An unresolvable run (legacy/imported, empty history) falls back to ALLOW, so the guard only ever
+// tightens the genuinely-private case and never breaks the normal company-visibility history flow.
+import { eq, or, desc, isNotNull, inArray } from "drizzle-orm";
+import { basename } from "node:path";
 import { db } from "../db/index.ts";
-import { run, runResult, test } from "../db/schema.ts";
+import { run, runResult, test, credential } from "../db/schema.ts";
 import { canRead, type ScopedUser } from "./scope.ts";
+
+type RunRow = { id: string; triggeredBy: string; scope: unknown };
 
 /** Resolves the `run` row a `?run=` param addresses. `key` may be the DB run id, the archived
  *  artifactDir name (bare `<stamp>-<env>-<result>` as History sends it, OR the ROOT-relative
@@ -22,17 +27,13 @@ import { canRead, type ScopedUser } from "./scope.ts";
  *  the artifact handlers resolve to the newest finished run (lib/records.ts). We mirror that
  *  "latest" resolution here (newest archived row) so the wall keys on the SAME run the handler
  *  will actually serve — otherwise `?run=latest` silently bypasses it (was an audit finding). */
-function resolveRunRow(key: string): { id: string; triggeredBy: string } | undefined {
+function resolveRunRow(key: string): RunRow | undefined {
+  const cols = { id: run.id, triggeredBy: run.triggeredBy, scope: run.scope };
   if (!key || key === "latest") {
-    return db
-      .select({ id: run.id, triggeredBy: run.triggeredBy })
-      .from(run)
-      .where(isNotNull(run.artifactDir))
-      .orderBy(desc(run.finishedAt))
-      .get();
+    return db.select(cols).from(run).where(isNotNull(run.artifactDir)).orderBy(desc(run.finishedAt)).get();
   }
   return db
-    .select({ id: run.id, triggeredBy: run.triggeredBy })
+    .select(cols)
     .from(run)
     .where(or(eq(run.id, key), eq(run.artifactDir, key), eq(run.artifactDir, `runs/${key}`)))
     .get();
@@ -60,6 +61,37 @@ export function canReadRun(user: ScopedUser, runParam: string | null | undefined
     .all();
   for (const t of rows) {
     if (!canRead(user, t)) return false;
+  }
+
+  const scope = (row.scope ?? {}) as { files?: unknown; credentialIds?: unknown };
+
+  // Belt-and-suspenders for the test-visibility wall above: run_result rows link to `test` rows by
+  // basename(file)::title and are silently skipped when that join misses (a renamed spec / title
+  // drift), which would fail OPEN. So ALSO wall by the run's SCOPED spec files — any private test
+  // whose file this run explicitly targeted, matched by basename, regardless of result linkage.
+  // (An unscoped "run all" leaves scope.files empty; that residual is covered by the join above.)
+  const files = Array.isArray(scope.files) ? scope.files.filter((f): f is string => typeof f === "string") : [];
+  if (files.length) {
+    const bases = new Set(files.map((f) => basename(f)));
+    const testRows = db.select({ filePath: test.filePath, visibility: test.visibility, ownerId: test.ownerId, teamId: test.teamId }).from(test).all();
+    for (const t of testRows) {
+      if (bases.has(basename(t.filePath)) && !canRead(user, t)) return false;
+    }
+  }
+
+  // Wall the run iff its child was handed a NON-company credential this user can't read — a
+  // private/team login can surface in an otherwise company-visible run's screenshots/network
+  // (buildRunConfig records the ids on scope.credentialIds).
+  const credIds = Array.isArray(scope.credentialIds) ? scope.credentialIds.filter((c): c is string => typeof c === "string") : [];
+  if (credIds.length) {
+    const credRows = db
+      .select({ visibility: credential.visibility, ownerId: credential.ownerId, teamId: credential.teamId })
+      .from(credential)
+      .where(inArray(credential.id, credIds))
+      .all();
+    for (const c of credRows) {
+      if (!canRead(user, c)) return false;
+    }
   }
   return true;
 }

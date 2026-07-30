@@ -1,5 +1,10 @@
 # DEPLOY.md — running Greenroom as a deployed multi-user platform
 
+> **"Platform" and "Team" are the same edition.** The README and the in-app guide call it the
+> **Team** edition, because that's what it means to the people using it. The code, the env vars
+> and this runbook call it **`platform`** — `GREENROOM_MODE=platform`, `npm run start:platform`.
+> This file is for whoever hosts it; users want [docs/guide/team.md](docs/guide/team.md).
+
 Greenroom began as a local, single-user tool and still runs that way by default (loopback,
 no accounts needed in demo). The platform layer (accounts, teams, scoping, the run queue —
 see [plans/platform.md](plans/platform.md)) lets one company run **one shared instance** many
@@ -55,8 +60,8 @@ Residual risk / must-do before exposure (do NOT skip):
 - **Node.js + Playwright browsers** — the run queue spawns `npx playwright test`; Chromium is
   installed by the `postinstall`.
 - A **reverse proxy** (nginx / Caddy) terminating TLS in front of the app.
-- A **GitHub token** with `read:packages` — the `@tjakoen` shared layer is published to GitHub
-  Packages, not npmjs, so installing needs it. See *Install* below.
+- **No registry token.** The `@tjakoen` shared layer is published to the public npm registry, so
+  installing needs no credentials at all. See *Install* below.
 
 ## Environment variables
 
@@ -156,23 +161,17 @@ Everything durable lives in two places — back both up:
 
 ## Install
 
-**Runtime (deploy/CI) install now works from scratch** — with one prerequisite. All runtime
-dependencies are either public npm packages (`better-auth`, `drizzle-orm`, `monaco-editor`,
-`@better-auth/sso`) or **GitHub Packages** publishes (`@tjakoen/{batch,grain,mill,proof}` — see
-`.npmrc` → `npm.pkg.github.com`). GitHub Packages needs auth, so before installing, add a token
-line to your environment's `.npmrc` (do NOT commit it) and export a token with `read:packages`:
+**Install works from scratch, with no credentials.** Every dependency — including the
+`@tjakoen/{batch,grain,mill,proof}` shared layer — resolves anonymously from the public npm
+registry. There is no `.npmrc` in this repo and none is needed:
 
 ```
-# ~/.npmrc or CI env — token NOT committed
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+bun install          # or `bun install --production` to skip devDependencies
+bun run postinstall  # installs the Playwright browser
 ```
 
-Then a runtime install resolves cleanly:
-
-```
-GITHUB_TOKEN=<pat> bun install --production   # skips devDependencies
-bun run postinstall                            # installs the Playwright browser
-```
+Verified 2026-07-30 against an empty `HOME` (no user `~/.npmrc`) and a purged package cache:
+82 packages installed, both typechecks green, 44/44 tests, every page 200.
 
 **Use Bun, not npm** — this is the one hard rule, re-verified 2026-07-30 on a fresh clone with a
 cold cache:

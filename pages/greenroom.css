@@ -253,3 +253,27 @@
 .gr-welcome__body { margin: 0; color: var(--ink); }
 .gr-welcome__hint { margin: 0; color: var(--ink-muted, var(--color-muted)); font-size: var(--text-sm); }
 .gr-welcome__actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-2); flex-wrap: wrap; }
+
+/* ---- edition badge (rail brand) ------------------------------------------------------------
+   The rail differs per edition — Settings is local-only, Environments/Accounts/Admin are
+   team-only — so the badge answers "why isn't that page here?" without a trip to the docs.
+   Monochrome like the rest of the shell: the label carries the meaning, not a colour. */
+.side-rail__brand { display: flex; align-items: center; gap: .5rem; }
+.edition-badge {
+  margin-left: auto;
+  font-size: .625rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: .1rem .4rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: .55;
+  white-space: nowrap;
+  cursor: default;
+}
+/* Demo is the one state where a change is silently discarded, so give it the only emphasis. */
+.edition-badge[data-edition="demo"] { opacity: 1; }
+/* The rail collapses to icons only — hide the label rather than let it wrap. */
+.side-rail[data-collapsed="true"] .edition-badge,
+.app-shell__rail[data-collapsed] .edition-badge { display: none; }

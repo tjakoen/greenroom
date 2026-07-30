@@ -94,16 +94,23 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 the **📦 Install dependencies** task (`bun install`), so a fresh clone installs on the first
 task run instead of crashing on a missing module.
 
-> **Install is `bun install`, and it needs a token.** Two hard constraints, both verified:
-> 1. **`npm install` fails** — `@tjakoen/pantry` (devDependency) pins `tjakoen.github.io#afc640a`,
->    a commit no longer on that remote. npm resolves the full graph and runs `git checkout afc640a`,
->    which aborts the whole install (even with `--omit=dev`), so the runtime deps never land. Bun
->    resolves it from the codeload tarball and succeeds. **Fixing this properly means re-pinning the
->    dep in the `pantry` repo** (`bun run deps:refresh` there → commit → re-pin here).
-> 2. **`@tjakoen/{batch,grain,mill,proof}` are private GitHub Packages** (`.npmrc` →
->    `npm.pkg.github.com`). Without a `read:packages` token in `~/.npmrc`, install dies with
->    `401 … failed to resolve`. Anyone cloning needs that token — or hand them a **deployed
->    instance URL** instead ([DEPLOY.md](DEPLOY.md)) so they install nothing.
+> **Install is `bun install`, and it needs no credentials** (changed 2026-07-30; the notes below
+> replace the old "needs a `read:packages` token" rule, which no longer applies):
+> 1. **`@tjakoen/{batch,grain,mill,proof}` are on the PUBLIC npm registry**, published from the
+>    `grain` monorepo (`packages/*`) and the `batch` repo. There is **no `.npmrc` in this repo**,
+>    so the scope resolves to npmjs by default. Verified against an empty `HOME` with a purged
+>    cache: 82 packages, typechecks green, 44/44 tests, every page 200.
+> 2. **Never commit an `.npmrc` with `_authToken=${GITHUB_TOKEN}`.** When the var is unset it
+>    resolves *empty* and overrides the user's valid `~/.npmrc` token, so every install 401s on a
+>    cold cache — invisible locally, fatal on a new machine.
+> 3. **`@tjakoen/pantry` was removed** as a devDependency: nothing imported it, and it alone
+>    caused the nested git-dep wall (hence no committed lockfile), the `npm install` failure (a
+>    dead `tjakoen.github.io#afc640a` pin), and a `mill ^0.1.2` requirement that blocked the
+>    tokenless install. Run the catalog cockpit from its own checkout; `pantry.config.json` stays.
+> 4. **`@tjakoen/crumb` (guided tours) is intentionally not a dependency** — `server.ts` imports it
+>    via a variable specifier in `try/catch` and degrades to tours-disabled. Add it locally with
+>    `bun add @tjakoen/crumb` if you want tours. It is not yet published to npmjs.
+> 5. Prefer `bun install`; `bun.lock` stays git-ignored.
 
 ## Non-negotiables
 

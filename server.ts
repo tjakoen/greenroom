@@ -214,6 +214,18 @@ function welcomeModal(): string {
   })();</script>`;
 }
 
+// Which edition am I looking at? The rail silently differs between editions (Settings is local-only;
+// Environments/Accounts/Admin are team-only), so without this a local user goes hunting for pages the
+// docs mention and finds nothing. "Team" is the user-facing name for what the code/env call `platform`.
+function editionBadge(): string {
+  const [label, title] = IS_DEMO
+    ? ["Demo", "Demo mode — seeded example data, every change is disabled"]
+    : IS_PLATFORM
+      ? ["Team", "Team edition — accounts, shared environments and a run queue"]
+      : ["Local", "Local edition — just this computer, no accounts"];
+  return `<span class="edition-badge" data-edition="${label.toLowerCase()}" title="${escapeHtml(title)}">${label}</span>`;
+}
+
 function grainPage(title: string, body: string, opts: { active?: string } = {}): string {
   const active = opts.active;
   return `<!DOCTYPE html>
@@ -237,7 +249,7 @@ function grainPage(title: string, body: string, opts: { active?: string } = {}):
       <span class="window-bar__end" style="width:6.5rem"></span>
     </header>
     <aside class="app-shell__rail side-rail">
-      <div class="side-rail__brand">${icon("spark")}<span>Greenroom</span></div>
+      <div class="side-rail__brand">${icon("spark")}<span>Greenroom</span>${editionBadge()}</div>
       ${railNav(active)}
     </aside>
     <main class="app-shell__main" data-surface="screen">${body}</main>

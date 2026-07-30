@@ -134,19 +134,22 @@ comm -23 <(git log --all --pretty=format: --name-only | sort -u | grep -v '^$') 
 # 8b. Images anywhere in history are opaque to every grep above. Expect zero UI captures of
 #     a real deployment (account lists, admin pages, anything with an address on screen).
 git log --all --pretty=format: --name-only | grep -iE '\.(png|jpg|jpeg|webp|gif)$' | sort -u
-# 8c. Can a stranger install? Check the registry the scope is ACTUALLY mapped to (.npmrc),
-#     not just npmjs. Today: 404 on npmjs + 401 on GitHub Packages = token required, so a
-#     stranger CANNOT install (verified 2026-07-30). Both must read 200 to call this green.
-curl -s -o /dev/null -w "npmjs:  %{http_code}\n" https://registry.npmjs.org/@tjakoen%2fgrain
-curl -s -o /dev/null -w "ghpkg:  %{http_code}\n" https://npm.pkg.github.com/@tjakoen%2fgrain
-# 8d. No auth token in the committed npm config — expect zero. (The scope->registry MAPPING
-#     line must stay: deleting .npmrc sends @tjakoen to npmjs, which only appears to work on
-#     a machine whose own ~/.npmrc still maps it.)
-grep -nE "_authToken" .npmrc 2>/dev/null; echo "exit=$? (1 = clean)"
-# 8e. `npm install` must work, or say so loudly. It currently FAILS on a dead git pin in
-#     @tjakoen/pantry — expect a "git reference could not be found" error until pantry is
-#     re-pinned. Bun is the only working installer.
-grep -n "afc640a" bun.lock 2>/dev/null && echo "STILL PINNED to the dead commit" || echo "clean"
+# 8c. Can a stranger install? The shared layer is on the PUBLIC npm registry and this repo has
+#     no .npmrc, so the scope resolves to npmjs by default. Expect 200 for every package.
+#     (Brand-new packages can 404 on an unauthenticated CDN edge for a few minutes; the
+#     tarball check below is the authoritative one.)
+for p in batch grain mill proof; do
+  curl -s -o /dev/null -w "$p: %{http_code}\n" "https://registry.npmjs.org/@tjakoen%2f$p"
+done
+# 8d. No committed npm config at all — expect "clean". A committed `_authToken=${GITHUB_TOKEN}`
+#     line is worse than none: when the var is unset it resolves EMPTY and overrides the user's
+#     valid ~/.npmrc token, so every install 401s on a cold cache (regression, fixed 2026-07-30).
+test -e .npmrc && echo "UNEXPECTED: .npmrc is back" || echo "clean"
+# 8e. A fresh clone must install with NO credentials. Run against an empty HOME so no user-level
+#     ~/.npmrc can mask a failure, and purge the cache so nothing is served locally.
+#     Expect a successful install, then a green typecheck.
+#       rm -rf ~/.bun/install/cache/@tjakoen
+#       HOME=$(mktemp -d) bun install && bun run check
 ```
 
 Pass: every history-only path is a known, data-free deletion; no image in history shows a

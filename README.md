@@ -25,6 +25,25 @@ One app, two editions, same code:
 | **Local** (default) | one person, own machine — no accounts, no server, config in local files | open the folder in VS Code, run a task |
 | **Team** | a company hosting one instance — accounts, sessions, encrypted credentials, a shared run queue, per-resource visibility | a URL: sign in, install nothing |
 
+Whichever you're running, Greenroom tells you: a **Local** / **Team** / **Demo** badge sits next to
+the logo in the sidebar.
+
+### Which one do I want?
+
+- **Just trying it, or checking a site by yourself?** → **Local.** Nothing to host, nothing to
+  sign into, no data leaves your machine.
+- **Want colleagues to run the same checks without installing anything?** → **Team.** You host it
+  once; they open a URL.
+- **Can I start local and move to team later?** Yes — your tests are just files in `tests/`, and
+  they carry over unchanged. Environments and logins are re-entered in the Team UI, because
+  there they live in an encrypted database instead of local files.
+- **Does local share anything?** No. Local writes to your own disk only: results, run history and
+  credentials never leave the machine.
+
+> **A note on naming:** "Team" is what this README and the in-app guide call the multi-user
+> edition. The code, env vars and deployment docs call the same thing **`platform`** — hence
+> `npm run start:platform` and `GREENROOM_MODE=platform`. Same edition, two names.
+
 The in-app guide adapts to whichever edition you're running. Reading order:
 
 - **New to Greenroom?** → **[the local guide](docs/guide/local.md)**, or open **User guide** in the app.
@@ -69,6 +88,8 @@ test.
 
 ## The pages
 
+**In both editions:**
+
 - **Run** — pick one or several environments, click **Run**, watch a live checklist
   (✓ ✕ ◐ ○). Several environments render as a **test × environment matrix** with per-env
   health. **Open full report** for screenshots, video and a step-by-step trace.
@@ -77,14 +98,26 @@ test.
   group, priority, owner and notes. **Record a new test**: name it, optionally pick a role
   under **Log in as**, click through the site, close the browser — your clicks are the test.
   Tests can also be **exported and imported as a zip**, to hand a set of checks to someone else.
-- **Editor** — edit a spec in the browser, validated before it saves (with version history on
-  the team edition).
+- **Editor** — edit a spec in the browser, validated before it saves.
 - **History** — every past run; filter and reopen any.
 - **Report a bug** — pick a run + test, then **Download bug bundle (.zip)**: trace, video,
   screenshots, logs and a plain-language `summary.md`. Or **Copy summary** for an issue
   tracker, or export a single-snapshot **PDF**.
 - **User guide** — the manual, in the app, matched to your edition.
-- **Settings** (local only) · **Environments · Accounts · Admin** (team only).
+
+**Local only:**
+
+- **Settings** — environments, roles & logins, and appearance, written to local files.
+
+**Team only:** *(these replace Settings — the same jobs, but shared, scoped and audited)*
+
+- **Environments** — the sites everyone tests against, with per-resource visibility.
+- **Accounts** — test-target logins, encrypted at rest and shared by visibility.
+- **Admin** — users, teams and the audit log.
+- The **Editor** also keeps **version history** here.
+
+If a page in this list isn't in your sidebar, check the edition badge next to the logo — you're
+in the other edition.
 
 The `trace.zip` is what developers actually want — they drop it on
 <https://trace.playwright.dev> and replay the whole session.

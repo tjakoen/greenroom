@@ -57,10 +57,19 @@ for (const { path, file, prepare } of PAGES) {
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+// First visit shows a modal welcome dialog, which both covers the UI and swallows clicks
+// (it silently broke the matrix shot's group-chip click). Set the same flag its own script
+// checks, so every shot is of the normal, returning-visitor state.
+await page.goto(`${BASE}/run`, { waitUntil: 'domcontentloaded' });
+await page.evaluate(() => { try { localStorage.setItem('gr_welcomed', '1'); } catch {} });
+
 for (const { path, file, prepare } of PAGES) {
   const res = await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
   if (!res || !res.ok()) throw new Error(`${path} returned ${res ? res.status() : 'no response'}`);
   await page.waitForTimeout(1200); // let the page's own fetches settle
+  const modal = page.locator('#gr-welcome:not([hidden])');
+  if (await modal.count()) throw new Error(`${path}: welcome modal still showing — it would cover the shot`);
   if (prepare) await prepare(page);
   await page.screenshot({ path: OUT + file });
   console.log('captured', file, '<-', path, prepare ? '(prepared)' : '');

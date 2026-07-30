@@ -19,27 +19,27 @@
     "report": "playwright show-report",
     "ui": "playwright test --ui",
     "codegen": "playwright codegen",
-    "deps:refresh": "for p in pantry; do bun add @tjakoen/$p@github:tjakoen/$p#$(git ls-remote https://github.com/tjakoen/$p.git main | cut -c1-7); done && bun update @tjakoen/batch @tjakoen/grain @tjakoen/mill @tjakoen/proof"
+    "deps:refresh": "bun update @tjakoen/batch @tjakoen/grain @tjakoen/mill @tjakoen/proof"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
-    "@tjakoen/pantry": "github:tjakoen/pantry#f17eddf",
     "@types/node": "^20.0.0",
     "bun-types": "^1.3.14",
     "dotenv": "^16.4.5",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5.6.0"
   },
-  "//dependencies": "USE `bun install`, NOT npm — VERIFIED 2026-07-30 on a fresh clone with a cold cache. (1) `npm install` FAILS: @tjakoen/pantry (devDep) pins tjakoen.github.io#afc640a, a commit no longer on that remote; npm resolves the whole graph and runs `git checkout afc640a`, aborting the install even with --omit=dev, so the runtime deps never land. Bun fetches the same commit as a codeload tarball and succeeds — including pantry. The real fix is re-pinning that dep IN THE pantry REPO (`bun run deps:refresh` there, commit, then re-pin here); until then npm is unusable and bun depends on GitHub still serving an unreferenced commit. (2) A TOKEN IS REQUIRED: grain · mill · proof · batch are published to GitHub Packages (@tjakoen scope → see .npmrc), NOT to npmjs (404 there). Without a read:packages token in ~/.npmrc, install dies `401 … failed to resolve`. Do not 'fix' this by deleting .npmrc — that drops the scope mapping and sends the scope to npmjs, which only appears to work on a machine whose own ~/.npmrc still maps it. (3) EXACT PINS, no carets: bun.lock is gitignored (a lock over the nested git graph above goes stale and can't be regenerated), so exact versions are the only thing keeping a fresh clone identical to a verified one — a caret on grain silently floated 0.1.8 -> 0.1.12 between machines. Bump deliberately via `bun run deps:refresh`, then re-verify. Published grain 0.1.12 carries organisms/code-editor, so the editor chrome no longer needs vendoring. PLATFORM DEPS, each justified in plans/platform.md §8: better-auth + @better-auth/sso (accounts/SSO/teams), drizzle-orm over embedded bun:sqlite, monaco-editor (in-browser editor, self-hosted byte-served from node_modules/monaco-editor/min/vs). drizzle-kit is a devDependency (migrations).",
+  "//dependencies": "RUNTIME deps resolve ANONYMOUSLY from the public npm registry: a fresh clone installs with no token and no .npmrc. The shared layer (@tjakoen/batch, grain, mill, proof) is published to npmjs under the @tjakoen scope, pinned to exact versions for reproducibility. DEV-ONLY CAVEAT: @tjakoen/pantry (component-catalog cockpit, never imported at runtime) is still a github git-dep whose graph nests several levels deep, which npm cannot resolve, so use bun install. bun.lock is gitignored for the same reason. @tjakoen/crumb (guided tours) is a normal dependency now that it is on npmjs; server.ts still imports it via a variable specifier inside try/catch, so the app degrades to tours-disabled rather than failing to boot if it is ever absent. PLATFORM DEPS, each justified in plans/platform.md section 8: better-auth + @better-auth/sso, drizzle-orm over embedded bun:sqlite, monaco-editor.",
   "dependencies": {
     "@better-auth/sso": "1.6.23",
     "@tjakoen/batch": "0.1.0",
     "@tjakoen/crumb": "0.1.4",
     "@tjakoen/grain": "0.1.12",
-    "@tjakoen/mill": "0.1.2",
+    "@tjakoen/mill": "0.2.0",
     "@tjakoen/proof": "0.1.2",
     "better-auth": "1.6.25",
     "drizzle-orm": "0.45.2",
     "monaco-editor": "0.55.1"
-  }
+  },
+  "//devDependencies": "@tjakoen/pantry (the component-catalog cockpit) was removed as a devDependency: nothing in this repo imports it, and it was the single cause of three problems — it pinned a github git-dep graph bun could not resolve from scratch (hence no committed lockfile), it broke npm install outright via a dead commit pin, and it required @tjakoen/mill ^0.1.2 which does not exist on npmjs, blocking a tokenless install. Run the cockpit from its own checkout instead; pantry.config.json is kept for it."
 }

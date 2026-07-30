@@ -303,6 +303,38 @@
   }
   async function runOne(_t) { goRun(); }
   async function runSelected() { if (!selectedKeys.size) return; goRun(); }
+
+  // ---- share: export selected (or all) as a .zip, import a shared .zip ----
+  function selectedFiles() {
+    return [...new Set((testsPayload.tests || []).filter((t) => selectedKeys.has(tkey(t))).map((t) => t.file))];
+  }
+  function exportTests() {
+    const files = selectedFiles();
+    // Empty selection exports everything. Content-Disposition makes this a download, not a nav.
+    window.location = '/api/tests/export' + (files.length ? '?files=' + encodeURIComponent(files.join(',')) : '');
+    toast(files.length ? `Exporting ${files.length} test${files.length === 1 ? '' : 's'}…` : 'Exporting all tests…');
+  }
+  function toB64(buf) {
+    const b = new Uint8Array(buf); let bin = ''; const chunk = 0x8000;
+    for (let i = 0; i < b.length; i += chunk) bin += String.fromCharCode.apply(null, b.subarray(i, i + chunk));
+    return btoa(bin);
+  }
+  async function importTests(file) {
+    if (!file) return;
+    const zipB64 = toB64(await file.arrayBuffer());
+    const r = await api('/api/tests/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zipB64 }) }).catch(() => null);
+    if (!r) return toast('Import failed.');
+    if (r.demo) return; // demo already toasted by api()
+    if (!r.ok) return toast(r.error || 'Import failed.');
+    const parts = [];
+    if (r.written.length) parts.push(`${r.written.length} added`);
+    if (r.skipped.length) parts.push(`${r.skipped.length} skipped (already here)`);
+    if (r.rejected.length) parts.push(`${r.rejected.length} rejected`);
+    if (r.metaMerged) parts.push(`${r.metaMerged} settings merged`);
+    toast('Imported: ' + (parts.join(', ') || 'nothing new') + '.');
+    selectedKeys.clear();
+    loadTests();
+  }
   async function runByTag() { if (!activeTags.size) return; goRun(); }
 
   // ------------------------------------------------------------------------- rename / delete
@@ -382,6 +414,9 @@
     $('selectAllBtn').addEventListener('click', toggleSelectAll);
     $('runSelectedBtn').addEventListener('click', runSelected);
     $('deleteSelectedBtn').addEventListener('click', deleteSelected);
+    $('exportBtn').addEventListener('click', exportTests);
+    $('importBtn').addEventListener('click', () => $('importFile').click());
+    $('importFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; importTests(f); });
     $('recordForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const name = $('recordName').value.trim();

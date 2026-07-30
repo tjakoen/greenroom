@@ -18,17 +18,18 @@ test("ciphertext is non-deterministic (fresh IV each call)", async () => {
   expect(await decryptSecret(b)).toBe("same");
 });
 
-test("blob packs iv(12) + ciphertext + gcm tag(16): len >= plaintext + 28", async () => {
+test("new blobs are g2:-tagged and pack iv(12) + ciphertext + gcm tag(16)", async () => {
   const blob = await encryptSecret("abc"); // 3 bytes
-  const bytes = Buffer.from(blob, "base64").length;
+  expect(blob.startsWith("g2:")).toBe(true);
+  const bytes = Buffer.from(blob.slice("g2:".length), "base64").length;
   expect(bytes).toBe(12 + 3 + 16);
 });
 
 test("tampering with the ciphertext fails the GCM auth tag (throws)", async () => {
   const blob = await encryptSecret("secret");
-  const raw = Buffer.from(blob, "base64");
+  const raw = Buffer.from(blob.slice("g2:".length), "base64");
   raw[raw.length - 1] ^= 0xff; // flip a byte in the auth tag / ciphertext
-  const tampered = raw.toString("base64");
+  const tampered = "g2:" + raw.toString("base64");
   await expect(decryptSecret(tampered)).rejects.toBeDefined();
 });
 

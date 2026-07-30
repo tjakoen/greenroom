@@ -50,6 +50,9 @@ export function testsBody(): string {
       <div class="gr-bulk-bar">
         <button class="btn" data-size="sm" type="button" id="selectAllBtn">Select all</button>
         <button class="btn" data-size="sm" type="button" id="runSelectedBtn" disabled>Run selected</button>
+        <button class="btn" data-size="sm" type="button" id="exportBtn" title="Download selected tests (or all) as a .zip to share">Export</button>
+        <button class="btn" data-size="sm" type="button" id="importBtn" title="Import tests from a shared .zip">Import</button>
+        <input type="file" id="importFile" accept=".zip,application/zip" hidden>
         <button class="btn" data-size="sm" data-status="danger" type="button" id="deleteSelectedBtn" disabled>Delete selected</button>
       </div>
     </div>

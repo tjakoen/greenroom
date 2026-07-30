@@ -19,7 +19,7 @@
 // lib/audit.ts's own redaction keeps `secretEnc` out of the audit trail too (redacts the top-level
 // key by name), so create/update/delete audit rows are safe to keep forever.
 import type { ScopedUser } from "../lib/scope.ts";
-import { canWrite, filterReadable } from "../lib/scope.ts";
+import { canWrite, canRescope, filterReadable, parseVisibility, resolveTeamId } from "../lib/scope.ts";
 import { writeAudit } from "../lib/audit.ts";
 import { encryptSecret } from "../lib/secret.ts";
 import { eq } from "drizzle-orm";
@@ -80,9 +80,13 @@ async function createAccount(ctx: ApiCtx): Promise<Response> {
     return json({ ok: false, error: "label, username, and password are required" }, 400);
   }
 
-  const visibility: Visibility =
-    body?.visibility === "private" || body?.visibility === "team" ? body.visibility : "company";
-  const teamId: string | null = visibility === "team" && body?.teamId ? String(body.teamId) : null;
+  // Reject an unrecognized visibility rather than silently defaulting a typo to company (open).
+  const visibility: Visibility = body?.visibility === undefined ? "company" : (parseVisibility(body.visibility) ?? "invalid" as Visibility);
+  if ((visibility as string) === "invalid") return json({ ok: false, error: "visibility must be private, team, or company" }, 400);
+  // Validate teamId against the caller's own membership (can't assign to a team you're not in).
+  const teamRes = resolveTeamId(user, visibility, body?.teamId);
+  if ("error" in teamRes) return json({ ok: false, error: teamRes.error }, 400);
+  const teamId = teamRes.teamId;
   const envId: string | null = body?.envId ? String(body.envId) : null;
   // P5 Gate C: the (env, role) pair a per-run handoff (lib/run-config.ts) builds
   // `<ENV>_<ROLE>_USERNAME/PASSWORD` child env vars from — NOT the free-text `label`. Optional:
@@ -113,12 +117,24 @@ async function updateAccount(ctx: ApiCtx): Promise<Response> {
   const username = body?.username !== undefined ? String(body.username).trim() : existing.username;
   if (!label || !username) return json({ ok: false, error: "label and username are required" }, 400);
 
-  const visibility: Visibility =
-    body?.visibility === "private" || body?.visibility === "team" || body?.visibility === "company"
-      ? body.visibility
-      : existing.visibility;
-  const teamId: string | null =
-    body?.teamId !== undefined ? (body.teamId ? String(body.teamId) : null) : existing.teamId;
+  // Resolve the requested scope (visibility/teamId), then guard it. Re-scoping (changing either) is
+  // owner/superadmin-only — a teammate with write access may edit fields but not relocate/flip scope.
+  let visibility: Visibility = existing.visibility;
+  if (body?.visibility !== undefined) {
+    const v = parseVisibility(body.visibility);
+    if (!v) return json({ ok: false, error: "visibility must be private, team, or company" }, 400);
+    visibility = v;
+  }
+  let teamId: string | null = existing.teamId;
+  if (body?.teamId !== undefined || visibility !== existing.visibility) {
+    const teamRes = resolveTeamId(user, visibility, body?.teamId !== undefined ? body.teamId : existing.teamId);
+    if ("error" in teamRes) return json({ ok: false, error: teamRes.error }, 400);
+    teamId = teamRes.teamId;
+  }
+  const rescoping = visibility !== existing.visibility || teamId !== existing.teamId;
+  if (rescoping && !canRescope(user, existing)) {
+    return json({ ok: false, error: "only the owner or a superadmin can change a resource's visibility or team" }, 403);
+  }
   const envId: string | null =
     body?.envId !== undefined ? (body.envId ? String(body.envId) : null) : existing.envId;
   const role: string | null =

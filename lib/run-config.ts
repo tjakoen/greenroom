@@ -39,6 +39,10 @@ export interface RunConfigBundle {
    *  DECRYPTED plaintext passwords — spread directly into the child process's `env`. Never
    *  written to disk, logged, or returned over HTTP. */
   credEnv: Record<string, string>;
+  /** The `credential` row ids actually handed off to this run (secrets whose plaintext may end up
+   *  in the run's captured artifacts — screenshots/network of the login). Persisted on the run row
+   *  so lib/run-scope.ts can wall the run's artifacts from anyone who can't read those creds. */
+  credentialIds: string[];
   /** Deletes the temp snapshot file (if any). Call once the run's child process has exited. */
   cleanup: () => void;
 }
@@ -67,7 +71,7 @@ export async function buildRunConfig(
   envs: string[],
   role?: string,
 ): Promise<RunConfigBundle> {
-  const noop: RunConfigBundle = { urlsFile: null, credEnv: {}, cleanup() {} };
+  const noop: RunConfigBundle = { urlsFile: null, credEnv: {}, credentialIds: [], cleanup() {} };
   if (!user) return noop; // demo mode / no session — today's .env + urls.json path is unchanged
 
   const wanted = new Set(envs.map((e) => String(e || "").trim()).filter(Boolean));
@@ -94,6 +98,7 @@ export async function buildRunConfig(
   const roleFilter = role && role.trim() ? NORM(role.trim()) : null;
   const credRows = filterReadable(user, await db.select().from(credential));
   const credEnv: Record<string, string> = {};
+  const credentialIds: string[] = [];
   for (const row of credRows) {
     if (!row.role) continue; // unknown/shared role — never handed off (db/schema.ts's own note)
     const roleKey = NORM(row.role);
@@ -114,6 +119,9 @@ export async function buildRunConfig(
     const prefix = envName ? `${NORM(envName)}_${roleKey}` : roleKey;
     credEnv[`${prefix}_USERNAME`] = row.username;
     credEnv[`${prefix}_PASSWORD`] = password;
+    // Track only the NON-company creds — a company cred is readable by everyone, so it never
+    // narrows who may read the run's artifacts (and tracking it would needlessly wall company runs).
+    if (row.visibility !== "company") credentialIds.push(row.id);
   }
 
   const cleanup = (): void => {
@@ -125,5 +133,5 @@ export async function buildRunConfig(
     }
   };
 
-  return { urlsFile, credEnv, cleanup };
+  return { urlsFile, credEnv, credentialIds, cleanup };
 }

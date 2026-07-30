@@ -115,27 +115,37 @@ export function startRun(
 
   // detached: give the child its own process group so Stop can kill the whole
   // tree (Playwright spawns worker processes) — see killProc/stopRun.
+  const childEnv: Record<string, string | undefined> = {
+    ...process.env,
+    GR_RUN_DIR: runDir,
+    TEST_ENVS: unique.join(","),
+    TEST_ENV: unique[0],
+    // "Run as" override: force every login('…') to use this role (see the login
+    // fixture). Empty/unset → each test keeps its own role.
+    ...(role && typeof role === "string" && role.trim() ? { GR_ROLE: role.trim() } : {}),
+    ...(light ? { CAPTURE: "light" } : {}),
+    // P5 Gate C (plans/platform.md §6): the DB→child config/credential handoff. GREENROOM_URLS_FILE
+    // points config/environments.ts at this run's scoped, secret-free urls.json-shaped snapshot;
+    // credEnv spreads in DECRYPTED `<ENV>_<ROLE>_USERNAME/PASSWORD` pairs (users/roles.ts's exact
+    // var-naming contract) so the child's getUser() resolves them without ever touching .env or
+    // disk. Both are only ever set by lib/run-config.ts's buildRunConfig — absent runConfig (demo,
+    // or any caller with no DB session) leaves this spawn byte-identical to before Gate C.
+    ...(runConfig?.urlsFile ? { GREENROOM_URLS_FILE: runConfig.urlsFile } : {}),
+    ...(runConfig?.credEnv ?? {}),
+  };
+  // SECURITY (platform): a Playwright spec is USER-AUTHORED arbitrary code (any account can edit
+  // specs via the in-browser Editor) and its stdout is streamed to /api/stream + archived to the
+  // run log — so anything in the child's env is exfiltratable by whoever triggers the run. The
+  // child needs NEITHER platform master secret: SECRET_KEY (the AES key that decrypts EVERY stored
+  // credential.secretEnc, all teams) and BETTER_AUTH_SECRET (the session-signing key) are the
+  // server's alone. Strip them so a `console.log(process.env.SECRET_KEY)` spec can't harvest the
+  // keys to the whole platform. Local sets neither (no DB/auth), so this is a no-op there; test-
+  // target creds still reach the child via credEnv (platform) or the .env-loaded pairs (local).
+  for (const k of ["SECRET_KEY", "BETTER_AUTH_SECRET"]) delete childEnv[k];
   const proc = spawn("npx", ["playwright", "test", ...targets, ...grepArgs], {
     cwd: ROOT,
     detached: process.platform !== "win32",
-    env: {
-      ...process.env,
-      GR_RUN_DIR: runDir,
-      TEST_ENVS: unique.join(","),
-      TEST_ENV: unique[0],
-      // "Run as" override: force every login('…') to use this role (see the login
-      // fixture). Empty/unset → each test keeps its own role.
-      ...(role && typeof role === "string" && role.trim() ? { GR_ROLE: role.trim() } : {}),
-      ...(light ? { CAPTURE: "light" } : {}),
-      // P5 Gate C (plans/platform.md §6): the DB→child config/credential handoff. GREENROOM_URLS_FILE
-      // points config/environments.ts at this run's scoped, secret-free urls.json-shaped snapshot;
-      // credEnv spreads in DECRYPTED `<ENV>_<ROLE>_USERNAME/PASSWORD` pairs (users/roles.ts's exact
-      // var-naming contract) so the child's getUser() resolves them without ever touching .env or
-      // disk. Both are only ever set by lib/run-config.ts's buildRunConfig — absent runConfig (demo,
-      // or any caller with no DB session) leaves this spawn byte-identical to before Gate C.
-      ...(runConfig?.urlsFile ? { GREENROOM_URLS_FILE: runConfig.urlsFile } : {}),
-      ...(runConfig?.credEnv ?? {}),
-    },
+    env: childEnv,
   });
   handle.proc = proc;
 

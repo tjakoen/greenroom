@@ -68,3 +68,38 @@ export function canWrite(user: ScopedUser, r: Scoped): boolean {
 export function filterReadable<T extends Scoped>(user: ScopedUser, rows: T[]): T[] {
   return rows.filter((r) => canRead(user, r));
 }
+
+export type Visibility = "private" | "team" | "company";
+
+/** Parse a client-supplied visibility. Returns the value, or null if it isn't one of the three —
+ *  callers must reject a null rather than silently coercing a typo ('priv') to the OPEN default. */
+export function parseVisibility(raw: unknown): Visibility | null {
+  return raw === "private" || raw === "team" || raw === "company" ? raw : null;
+}
+
+/** Validate a create/update's (visibility, teamId) against the caller's actual team membership.
+ *  Returns the teamId to persist, or an error string. Enforces: team-visibility requires a teamId
+ *  the caller is a member of (superadmin exempt); non-team visibility stores no teamId. Stops a
+ *  user assigning a resource to a team they don't belong to (which would then read as team-scoped
+ *  to that team's members). */
+export function resolveTeamId(
+  user: ScopedUser,
+  visibility: Visibility,
+  rawTeamId: unknown,
+): { teamId: string | null } | { error: string } {
+  if (visibility !== "team") return { teamId: null };
+  const teamId = rawTeamId ? String(rawTeamId) : "";
+  if (!teamId) return { error: "team visibility requires a teamId" };
+  if (!user.isSuperadmin && !user.teamIds.includes(teamId)) {
+    return { error: "you are not a member of that team" };
+  }
+  return { teamId };
+}
+
+/** May `user` change the SCOPE (visibility / teamId / ownership) of an existing resource — as
+ *  opposed to editing its contents? Only the owner or a superadmin may re-scope; a teammate with
+ *  write access (canWrite grants any team member) can edit a team resource's fields but must not
+ *  be able to relocate it to another team or flip its visibility. */
+export function canRescope(user: ScopedUser, r: Scoped): boolean {
+  return user.isSuperadmin || r.ownerId === user.id;
+}

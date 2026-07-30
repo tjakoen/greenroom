@@ -34,10 +34,24 @@ function allowedHosts(): string[] {
     .split(",").map((s) => s.trim().replace(/^https?:\/\//, "").replace(/:\d+$/, "").toLowerCase()).filter(Boolean);
 }
 export function isAllowedHost(host: string | null | undefined): boolean {
+  const allow = allowedHosts();
+  if (allow.length > 0) {
+    // Deployed instance: require an explicit, allowlisted Host. A trusted proxy always sets one, so
+    // a missing/empty Host — or a wildcard bind address like 0.0.0.0 that isLoopbackHost() otherwise
+    // treats as loopback — is NOT a legitimate client and must be rejected (else the loopback
+    // allowance becomes a blanket bypass on a public instance). Only genuine loopback names + the
+    // configured hosts pass.
+    if (!host) return false;
+    const h = String(host).replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
+    if (h === "localhost" || h === "127.0.0.1" || h === "::1") return true;
+    return allow.includes(h);
+  }
+  // Local edition: loopback-only. Empty host allowed (some clients omit it; the loopback bind
+  // already gates reachability).
   if (isLoopbackHost(host)) return true;
   if (!host) return true;
   const h = String(host).replace(/:\d+$/, "").replace(/^\[|\]$/g, "").toLowerCase();
-  return allowedHosts().includes(h);
+  return allow.includes(h);
 }
 export function isAllowedOrigin(origin: string | null | undefined): boolean {
   if (isLoopbackOrigin(origin)) return true;

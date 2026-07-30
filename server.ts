@@ -9,7 +9,7 @@
 // as a byte-identical fallback has been deleted; its endpoints live on unchanged below every
 // GRAIN page (same request/response shapes the SPA used, so nothing downstream had to change).
 import { join, basename, dirname } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { bunRuntime } from "@tjakoen/batch/platform/bun-runtime.ts";
 import { makeStatic } from "@tjakoen/batch/http/static.ts";
@@ -38,9 +38,10 @@ import {
   specFiles, recordedInputs, applyInputs,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
-import { canReadRun } from "./lib/run-scope.ts";
+import { exportTests, importTests, allSpecRels } from "./lib/tests-share.ts";
+import { canReadRun, canControlRun } from "./lib/run-scope.ts";
 import { startRun, stopRun as stopLegacy, killProc } from "./lib/runner.ts";
-import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue } from "./lib/run-queue.ts";
+import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue, QueueFullError } from "./lib/run-queue.ts";
 import { startRecording } from "./lib/recorder.ts";
 import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
 import { buildPdf } from "./lib/pdf.ts";
@@ -130,8 +131,9 @@ const NAV: Array<{ key: string; label: string; href: string; icon: string; foote
   { key: "environments", label: "Environments", href: "/environments", icon: "rules", platform: true },
   { key: "accounts", label: "Accounts", href: "/accounts", icon: "pin", platform: true },
   { key: "guide", label: "User guide", href: "/guide", icon: "knowledge" },
-  { key: "plans", label: "Plans", href: "/plans", icon: "files" },
-  { key: "catalog", label: "Catalog", href: "/catalog", icon: "spark" },
+  // Plans is a footer link (developer/PROOF surface, not a primary task). Catalog is intentionally
+  // NOT in the rail — it's the grain component gallery, served at /catalog but unlisted.
+  { key: "plans", label: "Plans", href: "/plans", icon: "files", footer: true },
   { key: "admin", label: "Admin", href: "/admin", icon: "settings", footer: true, platform: true },
   { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true, local: true },
 ];
@@ -161,7 +163,8 @@ function icon(sym: string, size?: "sm" | "lg"): string {
 function railNav(active?: string): string {
   const item = (n: (typeof NAV)[number]): string => {
     const current = n.key === active ? ` aria-current="page"` : "";
-    return `<a class="nav-item" href="${escapeHtml(n.href)}"${current}>${icon(n.icon)}` +
+    // data-surface makes each rail entry an addressable CRUMB tour surface (`nav:/run`, …).
+    return `<a class="nav-item" href="${escapeHtml(n.href)}" data-surface="nav:${escapeHtml(n.href)}"${current}>${icon(n.icon)}` +
       `<span class="nav-item__label">${escapeHtml(n.label)}</span></a>`;
   };
   const main = VISIBLE_NAV.filter((n) => !n.footer).map(item).join("\n    ");
@@ -178,21 +181,54 @@ function railNav(active?: string): string {
 //     the body, same order pantry.ts uses.
 //   - data-aside-hidden="true": P2 ships no assistant pane (the AI door is PG) — collapses the
 //     app-shell's reserved aside column to 0 instead of leaving a dead 20rem gap on the right.
+// First-load onboarding modal — shown once (localStorage `gr_welcomed`), reassures a non-coder that
+// the tool is private, and offers the CRUMB guided tour when it's installed. Copy is accurate per
+// edition: local runs entirely on the user's machine; platform runs on the company's own server.
+function welcomeModal(): string {
+  const privacy = IS_PLATFORM
+    ? "Greenroom runs on your team&rsquo;s own server. Your logins are stored encrypted, results stay inside your company, and nothing is ever sent to anyone else."
+    : "Greenroom runs entirely on your own computer. Your logins and test results stay on this machine. Nothing is uploaded, synced, or sent anywhere.";
+  const tourBtn = crumbHead
+    ? `<button class="btn" data-variant="primary" data-crumb-start="welcome" data-gr-welcome-dismiss>Take a quick tour</button>`
+    : "";
+  return `<div id="gr-welcome" class="gr-welcome" hidden role="dialog" aria-modal="true" aria-labelledby="gr-welcome-title">
+    <div class="gr-welcome__card">
+      <h2 id="gr-welcome-title" class="gr-welcome__title">Welcome to Greenroom</h2>
+      <p class="gr-welcome__body">${privacy}</p>
+      <p class="gr-welcome__hint">Point it at your site, say how to log in, and click Run. You&rsquo;ll get pass/fail with screenshots, video, and logs, plus a one-click bug bundle to hand a developer.</p>
+      <div class="gr-welcome__actions">
+        ${tourBtn}
+        <button class="btn" data-variant="${crumbHead ? "soft" : "primary"}" data-gr-welcome-dismiss>Get started</button>
+      </div>
+    </div>
+  </div>
+  <script>(function(){
+    try { if (localStorage.getItem("gr_welcomed")) return; } catch (e) {}
+    var el = document.getElementById("gr-welcome");
+    if (!el) return;
+    el.hidden = false;
+    function dismiss(){ el.hidden = true; try { localStorage.setItem("gr_welcomed", "1"); } catch (e) {} }
+    el.addEventListener("click", function(e){
+      if (e.target === el || e.target.closest("[data-gr-welcome-dismiss]")) dismiss();
+    });
+  })();</script>`;
+}
+
 function grainPage(title: string, body: string, opts: { active?: string } = {}): string {
   const active = opts.active;
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="baguette" data-crumb-prefix="/crumb">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} · Greenroom</title>
   <script src="/scripts/theme-boot.js"></script>
   ${styleLinks}
+  ${crumbHead}
 </head>
-<body class="app-window-backdrop">
-  <div class="app-shell app-window" data-aside-hidden="true">
+<body>
+  <div class="app-shell" data-aside-hidden="true">
     <header class="app-shell__window window-bar">
-      <span class="window-bar__dots"><i></i><i></i><i></i></span>
       <span class="window-bar__ctl">
         <button type="button" class="icon-btn" data-variant="ghost" data-cycle-theme title="Cycle theme" aria-label="Cycle theme">◆</button>
         <button type="button" class="icon-btn" data-variant="ghost" data-toggle-scheme title="Light / dark" aria-label="Light / dark">◐</button>
@@ -204,12 +240,13 @@ function grainPage(title: string, body: string, opts: { active?: string } = {}):
       <div class="side-rail__brand">${icon("spark")}<span>Greenroom</span></div>
       ${railNav(active)}
     </aside>
-    <main class="app-shell__main">${body}</main>
+    <main class="app-shell__main" data-surface="screen">${body}</main>
     <footer class="app-shell__status status-bar">
       <span class="status-bar__spacer"></span>
       <span class="made-with" data-status-optional>built on GRAIN</span>
     </footer>
   </div>
+  ${welcomeModal()}
   <div id="toast" class="gr-toast" role="status" aria-live="polite"></div>
   <script src="/scripts/shell.js" defer></script>
   <script src="/scripts/theme.js" defer></script>
@@ -225,12 +262,27 @@ const proofRoutes = createProofRoutes({
   chrome: (title, body) => grainPage(`${title} · Plans`, `<div class="board">${body}</div>`, { active: "plans" }),
 });
 
-// --- MILL: user guide (USER-GUIDE.md) at /guide, app-under-test context docs at /context. ---
+// --- MILL: user guide (docs/guide/*.md) at /guide, app-under-test context docs at /context. ---
+// The guide is EDITION-AWARE: the `local` and `team` start pages are each shown only in their own
+// edition; the shared how-to pages (writing-checks, reporting-bugs, faq) show in both. Ordered so
+// the current edition's start page leads. Each doc leads with its own `# Title` (see bodyOnlyLayout).
+const GUIDE_DIR = join(HERE, "docs", "guide");
+const GUIDE_ORDER = [IS_PLATFORM ? "team" : "local", "writing-checks", "reporting-bugs", "faq"];
 const guideSource: ContentSource = {
-  list: async () => ["user-guide"],
-  read: async (slug) => (slug === "user-guide" ? await Bun.file(join(HERE, "USER-GUIDE.md")).text() : null),
+  list: async () => {
+    const present = new Set(readdirSync(GUIDE_DIR).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)));
+    // Never surface the OTHER edition's start page.
+    present.delete(IS_PLATFORM ? "local" : "team");
+    return GUIDE_ORDER.filter((s) => present.has(s));
+  },
+  read: async (slug) => {
+    if (!/^[a-z0-9-]+$/.test(slug)) return null; // path-traversal guard
+    if (slug === (IS_PLATFORM ? "local" : "team")) return null; // hide the other edition's page
+    const f = join(GUIDE_DIR, `${slug}.md`);
+    return existsSync(f) ? await Bun.file(f).text() : null;
+  },
 };
-// USER-GUIDE.md (and each context doc) leads with its OWN `# Title` heading, so MILL's default
+// Each guide page in docs/guide/ (and each context doc) leads with its OWN `# Title` heading, so MILL's default
 // note masthead would re-emit the same title under our chrome and double it. Render the body
 // only (same fix pantry.ts uses); the grade guardrail still runs (data-grade="smooth").
 const bodyOnlyLayout = ({ body }: { body: string }) => `<article class="note" data-grade="smooth">${body}</article>`;
@@ -248,6 +300,30 @@ const millRoutes = createMillRoutes({
     },
   ],
 });
+
+// --- CRUMB: guided tours (tours/*.md) — a read-only projection mounted at /crumb (both editions).
+// OPTIONAL dependency: if @tjakoen/crumb isn't installed the app still boots with tours simply
+// disabled (the head tags + routes go dark). Install with `bun add @tjakoen/crumb` (GitHub Packages,
+// needs GITHUB_TOKEN with read:packages — see .npmrc / DEPLOY.md). crumb-live.js resolves surfaces
+// via `[data-surface="…"]` in the rendered pages; tours start on a `[data-crumb-start="<id>"]` click.
+let crumbRoutes: ((pathname: string) => Promise<Response | null>) | null = null;
+let crumbHead = "";
+let crumbLivePath = "";
+let crumbCssPath = "";
+try {
+  // Variable specifier (not a literal) so tsc treats @tjakoen/crumb as an OPTIONAL dep — the
+  // composition-root typecheck stays green whether or not it's installed; it's resolved at runtime.
+  const crumbSpec = "@tjakoen/crumb/routes.ts";
+  const { createCrumbRoutes } = (await import(crumbSpec)) as {
+    createCrumbRoutes: (deps: { toursDir: string; prefix?: string }) => (pathname: string) => Promise<Response | null>;
+  };
+  crumbRoutes = createCrumbRoutes({ toursDir: join(HERE, "tours") });
+  crumbLivePath = fileURLToPath(import.meta.resolve("@tjakoen/crumb/crumb-live.js"));
+  crumbCssPath = fileURLToPath(import.meta.resolve("@tjakoen/crumb/crumb.css"));
+  crumbHead = `<link rel="stylesheet" href="/crumb.css">\n  <script type="module" src="/crumb-live.js"></script>`;
+} catch {
+  console.warn("[server] @tjakoen/crumb not installed — guided tours disabled. Enable with: bun add @tjakoen/crumb");
+}
 
 // ---------------------------------------------------------------------- helpers
 /** Parse a JSON request body, or {} on empty/invalid (mirrors server.js readBody). */
@@ -370,12 +446,17 @@ async function handle(req: Request): Promise<Response> {
     }
   }
 
-  // The single-doc guide is served at /guide by MILL (which lists it as /guide/user-guide).
-  const millPath = p === "/guide" ? "/guide/user-guide" : p;
   const fromProof = await proofRoutes(p);
   if (fromProof) return fromProof;
-  const fromMill = await millRoutes(millPath);
+  // /guide is MILL's edition-aware index (local/team start page + shared how-to pages);
+  // /guide/<slug> renders one doc. No remap — MILL serves the index at the bare prefix.
+  const fromMill = await millRoutes(p);
   if (fromMill) return fromMill;
+  // CRUMB tour data (GET /crumb/tours.json + /crumb/tours/<id>.json) — read-only, both editions.
+  if (crumbRoutes) {
+    const fromCrumb = await crumbRoutes(p);
+    if (fromCrumb) return fromCrumb;
+  }
 
   // ---- GRAIN shell assets (P2): styles/scripts/component-CSS/icon sprite + the catalog ----
   const htmlHeaders = { "Content-Type": "text/html; charset=utf-8" };
@@ -387,6 +468,9 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/favicon.ico") return new Response(null, { status: 204 });
   if (p === "/components.css") return new Response(await componentCss.css(), { headers: { "Content-Type": "text/css" } });
   if (p === "/greenroom.css") return serveStatic(join(HERE, "pages", "greenroom.css"));
+  // CRUMB client assets (self-hosted from the package, like monaco) — only when installed.
+  if (p === "/crumb-live.js" && crumbLivePath) return serveStatic(crumbLivePath);
+  if (p === "/crumb.css" && crumbCssPath) return serveStatic(crumbCssPath);
   if (p === "/catalog") return new Response(await catalog.html(), { headers: htmlHeaders });
   if (p === "/search.json") {
     const pages = VISIBLE_NAV.map((n) => ({ title: n.label, url: n.href }));
@@ -464,6 +548,9 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/api/state") {
     const run = qp.get("run");
     if (run) {
+      // A per-run status feed leaks the same private-test signal the artifact wall protects
+      // (result/test titles of a private run) — scope it in platform (audit: unguarded ?run= feeds).
+      if (IS_PLATFORM && user && !canReadRun(user, run)) return json({ error: "forbidden" }, 403);
       const st = publicState(run);
       return st ? json(st) : json({ error: "Unknown run." }, 404);
     }
@@ -515,18 +602,35 @@ async function handle(req: Request): Promise<Response> {
       return json(res, res.ok ? 200 : 409);
     }
     if (!user) return json({ error: "unauthenticated" }, 401); // belt-and-suspenders — the session gate above already guarantees this in platform mode
-    const { runId, position } = await enqueueRun({ userId: user.id, envs: envList, files, grep, role, light: !!light });
-    return json({ ok: true, runId, position });
+    try {
+      const { runId, position } = await enqueueRun({ userId: user.id, envs: envList, files, grep, role, light: !!light });
+      return json({ ok: true, runId, position });
+    } catch (err: any) {
+      if (err instanceof QueueFullError) return json({ ok: false, error: err.message }, 429);
+      throw err;
+    }
   }
   // Gate D: /api/queue — every currently queued/running row + its position, for the Run page to
   // poll. PLATFORM only (the queue is db-backed); the LOCAL edition never queues, so it's empty.
-  if (p === "/api/queue" && method === "GET") return json({ ok: true, queue: IS_PLATFORM ? listQueue() : [] });
+  if (p === "/api/queue" && method === "GET") {
+    // Scope to the caller's own runs (superadmin sees all) — the raw list exposes every user's
+    // runId + triggeredBy + envLabel, which is the enumeration primitive for the ?run= reads/stops.
+    const q = IS_PLATFORM ? listQueue() : [];
+    const scoped = IS_PLATFORM && user && !user.isSuperadmin ? q.filter((r) => r.triggeredBy === user.id) : q;
+    return json({ ok: true, queue: scoped });
+  }
   // Gate B/D: ?run=<runId> stops that specific run (queued -> never starts; running -> killed) via
   // the queue (platform); otherwise the legacy stop (stop an in-flight recording, or whatever
   // lib/runner.ts's own map thinks is "the active run" — the only path in the LOCAL edition).
   if (p === "/api/stop" && method === "POST") {
     const runParam = qp.get("run");
-    return okOr(IS_PLATFORM && runParam ? stopQueuedRun(runParam) : stopLegacy(undefined), 409);
+    // Stopping another user's run is cross-user tampering/DoS — only its triggerer or a superadmin
+    // may (canControlRun, fail-closed). Local has no accounts, so it keeps the legacy single-run stop.
+    if (IS_PLATFORM && runParam) {
+      if (user && !canControlRun(user, runParam)) return json({ ok: false, error: "forbidden" }, 403);
+      return okOr(stopQueuedRun(runParam), 409);
+    }
+    return okOr(stopLegacy(undefined), 409);
   }
   if (p === "/api/record" && method === "POST") {
     const { env, name, role } = await readBody(req);
@@ -546,13 +650,21 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/api/stream") {
     const run = qp.get("run");
     if (run) {
+      // The live stream replays a run's buffered stdout — which for a private test can include the
+      // app-under-test's credential entry, exactly what the saved-artifact wall protects. Scope it.
+      if (IS_PLATFORM && user && !canReadRun(user, run)) return new Response("Forbidden", { status: 403 });
       const stream = runStream(run);
       return stream ?? new Response("Unknown run.", { status: 404 });
     }
     return runStream();
   }
 
-  if (p === "/api/runs") return json(listRuns());
+  // Scope the run history in platform: listRuns() leaks every run's dir/env/pass-fail (metadata of
+  // private runs + the dir names that key the artifact reads). Filter to runs the caller may read.
+  if (p === "/api/runs") {
+    const runs = listRuns();
+    return json(IS_PLATFORM && user && !user.isSuperadmin ? runs.filter((r: any) => canReadRun(user, r.id)) : runs);
+  }
 
   // ---- snapshots / PDF / video ----
   if (p === "/api/pdf-data") {
@@ -624,6 +736,31 @@ async function handle(req: Request): Promise<Response> {
     const { file, name } = await readBody(req);
     return okOr(renameTest(file, name));
   }
+  // Share tests between users: export selected specs (or all) as one .zip carrying the spec files,
+  // the helpers they import, and their tests-meta.json entries; import merges such a zip back.
+  if (p === "/api/tests/export" && method === "GET") {
+    const filesParam = qp.get("files");
+    const rels = filesParam ? filesParam.split(",").map((s) => s.trim()).filter(Boolean) : allSpecRels();
+    const zip = exportTests(rels);
+    return new Response(new Uint8Array(zip), {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="greenroom-tests-${rels.length}.zip"`,
+      },
+    });
+  }
+  if (p === "/api/tests/import" && method === "POST") {
+    if (IS_DEMO) return okOr(denyInDemo, 409);
+    // The zip arrives base64 inside a JSON body (guardRequest only lets application/json POSTs
+    // through, its CSRF gate). Small test bundles, so base64 overhead is a non-issue.
+    const { zipB64, overwrite } = await readBody(req);
+    if (typeof zipB64 !== "string" || !zipB64) return json({ ok: false, error: "No file received." }, 400);
+    try {
+      return json(importTests(Buffer.from(zipB64, "base64"), { overwrite: !!overwrite }));
+    } catch (err: any) {
+      return json({ ok: false, error: `Could not read that zip: ${err?.message ?? String(err)}` }, 400);
+    }
+  }
   if (p === "/api/test-meta" && method === "POST") {
     const { file, title, group, priority, owner, notes } = await readBody(req);
     return okOr(saveMeta(file, title, { group, priority, owner, notes }));
@@ -671,8 +808,9 @@ async function handle(req: Request): Promise<Response> {
 
   // ---- guide + onboarding (the SPA's own raw endpoints; MILL /guide is a separate human route) ----
   if (p === "/api/guide") {
-    const md = readFileMaybe(join(ROOT, "USER-GUIDE.md"));
-    return new Response(md || "# Guide\n\nUSER-GUIDE.md is missing.", { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+    // Legacy raw-markdown endpoint — serve the current edition's start guide (see docs/guide/).
+    const md = readFileMaybe(join(GUIDE_DIR, `${IS_PLATFORM ? "team" : "local"}.md`));
+    return new Response(md || "# Guide\n\nGuide is missing.", { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
   }
   if (p === "/api/onboarding") return json(onboardingState());
 
@@ -704,24 +842,54 @@ async function handle(req: Request): Promise<Response> {
 // ownership" box): better-auth's own runner creates its tables first, then drizzle's migrate()
 // creates ours. Runs every boot; both are no-ops once the schema is current. Top-level await is
 // fine under bun.
-// Fail closed on a real deployment (audit #4 — no silent security downgrades). ALLOWED_HOSTS set =
-// internet-exposed behind a proxy, so the dev fallbacks (auth/index.ts DEV_SECRET_FALLBACK →
-// forgeable sessions; lib/secret.ts dev key → publicly-known cred encryption; http → no Secure
-// cookie) MUST NOT apply. Refuse to boot rather than come up quietly insecure. A local-platform dev
-// run (GREENROOM_MODE=platform, no ALLOWED_HOSTS) still tolerates the fallbacks.
-if (process.env.ALLOWED_HOSTS) {
-  const missing = ["BETTER_AUTH_SECRET", "SECRET_KEY"].filter((k) => !process.env[k]);
-  const problems = missing.map((k) => `${k} is unset`);
-  if (!(process.env.BETTER_AUTH_URL || "").startsWith("https://")) {
-    problems.push("BETTER_AUTH_URL must be an https:// URL (Secure cookies)");
-  }
-  if (problems.length) {
-    console.error(
-      "Refusing to start a deployed instance (ALLOWED_HOSTS is set) with insecure config:\n" +
-        problems.map((p) => `  • ${p}`).join("\n") +
-        "\nSet these in the environment (see DEPLOY.md) and restart.",
-    );
+// Fail closed on a real deployment (audit #4 — no silent security downgrades). A "deployment" is
+// anything network-reachable, which is TWO independent facts the old guard conflated with only
+// ALLOWED_HOSTS:
+//   • ALLOWED_HOSTS set → served behind a proxy on a real domain (proxy binds us on loopback), OR
+//   • HOST bound to a non-loopback interface (e.g. 0.0.0.0) → directly reachable.
+// Either way the dev fallbacks (auth DEV_SECRET_FALLBACK → forgeable sessions; secret.ts dev key →
+// publicly-known cred encryption; http → no Secure cookie) MUST NOT apply. A purely loopback
+// local-platform dev run (GREENROOM_MODE=platform, HOST unset, no ALLOWED_HOSTS) still tolerates them.
+{
+  const boundHost = process.env.HOST ?? "127.0.0.1";
+  // A BIND address is loopback-only ONLY for the true loopback names — note 0.0.0.0 means "all
+  // interfaces" (network-exposed) here, the OPPOSITE of isLoopbackHost()'s Host-header semantics
+  // (which treats 0.0.0.0 as loopback for anti-DNS-rebinding). So test the bind explicitly.
+  const bindLoopbackOnly = ["127.0.0.1", "localhost", "::1", "[::1]"].includes(boundHost.trim().toLowerCase());
+  const networkExposed = !bindLoopbackOnly; // 0.0.0.0 / a real IP / a hostname → reachable off-box
+  const deployed = !!process.env.ALLOWED_HOSTS || networkExposed;
+
+  // Demo is a read-only LOCAL variant with NO session gate (lib/paths.ts IS_PLATFORM is false in
+  // demo) — it must never be put on a public interface. Refuse rather than serve unauthenticated.
+  if (deployed && IS_DEMO) {
+    console.error("Refusing to expose DEMO mode on a network interface — demo has no authentication. Drop GREENROOM_DEMO or bind loopback only.");
     process.exit(1);
+  }
+  // A network-reachable instance MUST be the platform edition (accounts + session gate + config
+  // lock). Binding a non-loopback HOST in the local edition would expose the unlocked flat-file
+  // config writers and every route with no auth.
+  if (networkExposed && !IS_PLATFORM) {
+    console.error(`Refusing to bind a non-loopback HOST (${boundHost}) in the local edition — a network-exposed instance must run the platform edition (set GREENROOM_MODE=platform + secrets, see DEPLOY.md).`);
+    process.exit(1);
+  }
+  if (deployed) {
+    // `.trim()` matches lib/secret.ts / auth's own emptiness test — a whitespace-only SECRET_KEY
+    // ("SECRET_KEY= " from a secrets manager) must NOT pass here and then silently fall back to the
+    // publicly-known dev key at runtime.
+    const problems = ["BETTER_AUTH_SECRET", "SECRET_KEY"]
+      .filter((k) => !(process.env[k] || "").trim())
+      .map((k) => `${k} is unset`);
+    if (!(process.env.BETTER_AUTH_URL || "").startsWith("https://")) {
+      problems.push("BETTER_AUTH_URL must be an https:// URL (Secure cookies)");
+    }
+    if (problems.length) {
+      console.error(
+        "Refusing to start a network-exposed instance with insecure config:\n" +
+          problems.map((pr) => `  • ${pr}`).join("\n") +
+          "\nSet these in the environment (see DEPLOY.md) and restart.",
+      );
+      process.exit(1);
+    }
   }
 }
 

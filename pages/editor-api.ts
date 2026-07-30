@@ -57,6 +57,17 @@ type TestRow = typeof test.$inferSelect;
 
 const abs = (rel: string) => join(ROOT, rel);
 
+/** Child env for the `playwright test --list` validation spawn, with the platform master secrets
+ *  stripped. `--list` COLLECTS a spec — which executes its module-level code — and this endpoint
+ *  returns the child's stdout/stderr to the client, so a user-authored spec with a top-level
+ *  `console.log(process.env.SECRET_KEY)` would otherwise leak the AES/session keys. Mirrors
+ *  lib/runner.ts's strip; the collector needs neither secret. */
+function validateChildEnv(): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...process.env };
+  for (const k of ["SECRET_KEY", "BETTER_AUTH_SECRET"]) delete env[k];
+  return env;
+}
+
 // ---- canonical test row (see file header §1) -----------------------------------------------
 /** The one `test` row a file's version chain is anchored to: oldest by createdAt, then id.
  *  Read-only — returns null when the file has no `test` row yet. */
@@ -67,6 +78,16 @@ function resolveCanonicalTest(rel: string): TestRow | undefined {
     .where(eq(test.filePath, rel))
     .orderBy(asc(test.createdAt), asc(test.id))
     .get();
+}
+
+/** May `user` read the WHOLE file `rel`? A spec with N `test()` blocks is N `test` rows, each with
+ *  its own visibility, but the editor reads/writes the whole file on disk as one unit. Scoping only
+ *  the canonical (oldest) row would let a company-reader read/overwrite a file that also contains a
+ *  private sibling test they can't see. So require read on EVERY row for the file. A file with no
+ *  rows yet (unmanaged / record-created) is company-readable by default (empty ⇒ true). */
+function canReadFile(user: ScopedUser, rel: string): boolean {
+  const rows = db.select().from(test).where(eq(test.filePath, rel)).all();
+  return rows.every((r) => canRead(user, r));
 }
 
 /** As resolveCanonicalTest, but creates a minimal row (owned by `user`) when none exists, so a
@@ -109,9 +130,9 @@ function getSource(ctx: ApiCtx): Response {
   const rel = String(ctx.qp.get("file") ?? "");
   if (!validTestFile(rel)) return json({ error: "No such test file." }, 404);
   const canonical = resolveCanonicalTest(rel);
-  // Managed by a scoped test row → enforce read scope; unmanaged file in the shared tests/ dir →
-  // readable (company-internal default, §4).
-  if (canonical && !canRead(user, canonical)) return json({ error: "forbidden" }, 403);
+  // Enforce read scope across EVERY test row in the file (a private sibling walls the whole file);
+  // an unmanaged file in the shared tests/ dir is readable (company-internal default, §4).
+  if (!canReadFile(user, rel)) return json({ error: "forbidden" }, 403);
   const versionCount = canonical
     ? (db.select().from(testVersion).where(eq(testVersion.testId, canonical.id)).all().length)
     : 0;
@@ -139,7 +160,9 @@ async function putSource(ctx: ApiCtx): Promise<Response> {
   // An unmanaged file (no test row yet) gets a canonical row owned by the saver, so it's self-
   // authorised.
   const existing = resolveCanonicalTest(rel);
-  if (existing && !canRead(user, existing)) return json({ ok: false, error: "forbidden" }, 403);
+  // Read-scope the WHOLE file: overwriting it rewrites every sibling test() too, so a private
+  // sibling the saver can't read must wall the write (not just the canonical row's visibility).
+  if (!canReadFile(user, rel)) return json({ ok: false, error: "forbidden" }, 403);
 
   // Layer 1 — reject unparseable TS BEFORE it can reach the disk or the runner (§5 guardrail).
   const diagnostics = parseGuard(source);
@@ -164,7 +187,7 @@ function listVersions(ctx: ApiCtx): Response {
   if (!validTestFile(rel)) return json({ error: "No such test file." }, 404);
   const canonical = resolveCanonicalTest(rel);
   if (!canonical) return json({ versions: [] });
-  if (!canRead(user, canonical)) return json({ error: "forbidden" }, 403);
+  if (!canReadFile(user, rel)) return json({ error: "forbidden" }, 403);
   const rows = db
     .select({ id: testVersion.id, authorId: testVersion.authorId, message: testVersion.message, createdAt: testVersion.createdAt })
     .from(testVersion)
@@ -181,8 +204,10 @@ function getVersion(ctx: ApiCtx): Response {
   if (!vid) return json({ error: "id is required" }, 400);
   const version = db.select().from(testVersion).where(eq(testVersion.id, vid)).get();
   if (!version) return json({ error: "not found" }, 404);
+  // The version blob is the WHOLE-FILE source — scope on every test row for that file, not just the
+  // canonical row this version chain is anchored to (a private sibling must wall the restore/diff).
   const owner = db.select().from(test).where(eq(test.id, version.testId)).get();
-  if (owner && !canRead(user, owner)) return json({ error: "forbidden" }, 403);
+  if (owner && !canReadFile(user, owner.filePath)) return json({ error: "forbidden" }, 403);
   return json({ id: version.id, source: version.source, message: version.message, authorId: version.authorId, createdAt: version.createdAt });
 }
 
@@ -196,8 +221,7 @@ async function validate(ctx: ApiCtx): Promise<Response> {
   const body = await readBody(ctx.req);
   const rel = String(body?.file ?? "");
   if (!validTestFile(rel)) return json({ ok: false, error: "No such test file." }, 404);
-  const canonical = resolveCanonicalTest(rel);
-  if (canonical && !canRead(user, canonical)) return json({ ok: false, error: "forbidden" }, 403);
+  if (!canReadFile(user, rel)) return json({ ok: false, error: "forbidden" }, 403);
 
   // Cheap layer first.
   const parseDiags = parseGuard(readFileMaybe(abs(rel)));
@@ -209,7 +233,7 @@ async function validate(ctx: ApiCtx): Promise<Response> {
     cwd: ROOT,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env },
+    env: validateChildEnv(),
   });
   const timer = setTimeout(() => proc.kill(), 30_000); // don't hang a request on a wedged collect
   const [out, err, code] = await Promise.all([
@@ -273,7 +297,7 @@ async function editorLocal(ctx: ApiCtx): Promise<Response> {
   if (!validTestFile(rel)) return json({ ok: false, error: "No such test file." }, 404);
   const parseDiags = parseGuard(readFileMaybe(abs(rel)));
   if (parseDiags.length) return json({ ok: true, valid: false, diagnostics: parseDiags, output: parseDiags[0].message });
-  const proc = Bun.spawn(["npx", "playwright", "test", "--list", rel], { cwd: ROOT, stdout: "pipe", stderr: "pipe", env: { ...process.env } });
+  const proc = Bun.spawn(["npx", "playwright", "test", "--list", rel], { cwd: ROOT, stdout: "pipe", stderr: "pipe", env: validateChildEnv() });
   const timer = setTimeout(() => proc.kill(), 30_000);
   const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   clearTimeout(timer);

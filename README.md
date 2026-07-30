@@ -16,16 +16,27 @@ It never needs your app's source — you tell it the URLs and how to log in.
 read-only against seeded example data — a populated dashboard with red and green results, zero
 config. A **Demo** badge appears and every write is disabled.
 
-Greenroom runs two ways from one codebase:
+## Two ways to run it
+
+One app, two editions, same code:
 
 | | Who for | How you reach it |
 |---|---|---|
-| **Local** (default) | one person, own machine | open the folder in VS Code, run a task |
-| **Platform** | a team, many at once | a URL — accounts, teams, a run queue → **[DEPLOY.md](DEPLOY.md)** |
+| **Local** (default) | one person, own machine — no accounts, no server, config in local files | open the folder in VS Code, run a task |
+| **Team** | a company hosting one instance — accounts, sessions, encrypted credentials, a shared run queue, per-resource visibility | a URL: sign in, install nothing |
+
+The in-app guide adapts to whichever edition you're running. Reading order:
+
+- **New to Greenroom?** → **[the local guide](docs/guide/local.md)**, or open **User guide** in the app.
+- **Standing up a shared instance?** → **[DEPLOY.md](DEPLOY.md)** for hosting, then **[the team guide](docs/guide/team.md)**.
+- **Building on the code?** → **[CLAUDE.md](CLAUDE.md)**.
+
+Both guides link the same how-to pages: [writing checks](docs/guide/writing-checks.md) ·
+[reporting a bug](docs/guide/reporting-bugs.md) · [safety and FAQ](docs/guide/faq.md).
 
 ---
 
-## First time (once)
+## First time (local, once)
 
 1. Install **Node.js** (LTS) from <https://nodejs.org> — one-time, like installing any app.
 2. Install **Bun** from <https://bun.sh> — one line in a terminal
@@ -33,28 +44,17 @@ Greenroom runs two ways from one codebase:
    runs on Bun; this is one-time.
 3. Install **VS Code** from <https://code.visualstudio.com> and open this folder in it
    (**File → Open Folder**). It'll offer to install the **Playwright** extension — say yes.
-4. **Add your access token** (one-time, and only if you cloned this repo yourself). Some of
-   Greenroom's building blocks are published privately, so installing needs a GitHub token
-   with `read:packages`. Create one at <https://github.com/settings/tokens>, then add these two
-   lines to the file `.npmrc` in your home folder (create it if it isn't there), replacing
-   `<your-token>`:
-
-   ```
-   @tjakoen:registry=https://npm.pkg.github.com
-   //npm.pkg.github.com/:_authToken=<your-token>
-   ```
-
-   Without it, step 5 stops with `401 … failed to resolve`. **If someone sent you a link to a
-   running Greenroom instead, skip all of this** — just open the link and sign in; there is
-   nothing to install.
-5. Start the app without typing anything: **Terminal → Run Task → 🚀 Open Test App**. The
+4. Start the app without typing anything: **Terminal → Run Task → 🚀 Open Test App**. The
    first run installs everything (a few minutes — it runs `bun install` for you), then the app
    opens in your browser at <http://localhost:4321>.
-6. Add your **environments** — **Settings → Environments**: a name like `staging` and its URL;
+5. Add your **environments** — **Settings → Environments**: a name like `staging` and its URL;
    one is the default. The same panel's **Login form** section is where you describe your app's
    sign-in page (per site, or one shared form). That's data, not code.
-7. Add your **roles & logins** — **Settings → Roles & logins**: create a role (e.g. `admin`),
+6. Add your **roles & logins** — **Settings → Roles & logins**: create a role (e.g. `admin`),
    tick which sites it applies to, type a username + password for each, **Save**.
+
+> **Use `bun install`, not `npm install`.** A dev-only dependency pins a git commit npm refuses
+> to resolve; bun handles it. The VS Code tasks already use bun.
 
 A **role** is a named account your tests sign in as. Role *definitions* (names + which sites)
 live in `config/roles.json`; the *credentials* go only into a private, git-ignored `.env` —
@@ -76,14 +76,15 @@ test.
   tag**. Filter by `@tag` or smart filter (**Failing / Never run / Flaky / Slowest**). 🏷 sets
   group, priority, owner and notes. **Record a new test**: name it, optionally pick a role
   under **Log in as**, click through the site, close the browser — your clicks are the test.
+  Tests can also be **exported and imported as a zip**, to hand a set of checks to someone else.
 - **Editor** — edit a spec in the browser, validated before it saves (with version history on
-  the platform edition).
+  the team edition).
 - **History** — every past run; filter and reopen any.
 - **Report a bug** — pick a run + test, then **Download bug bundle (.zip)**: trace, video,
   screenshots, logs and a plain-language `summary.md`. Or **Copy summary** for an issue
   tracker, or export a single-snapshot **PDF**.
-- **User guide** — the manual, in the app ([USER-GUIDE.md](USER-GUIDE.md)).
-- **Settings** (local only) · **Environments · Accounts · Admin** (platform only).
+- **User guide** — the manual, in the app, matched to your edition.
+- **Settings** (local only) · **Environments · Accounts · Admin** (team only).
 
 The `trace.zip` is what developers actually want — they drop it on
 <https://trace.playwright.dev> and replay the whole session.
@@ -112,7 +113,8 @@ then kept only for failures.
 
 ## Writing a test by hand
 
-**Record a new test** is the easy path. Otherwise add a `*.spec.ts` anywhere in `tests/`:
+**Record a new test** is the easy path — and [writing checks](docs/guide/writing-checks.md) is
+the full walkthrough. Otherwise add a `*.spec.ts` anywhere in `tests/`:
 
 1. Copy the shape of a shipped example — `tests/example-nav.spec.ts` (no login) or
    `tests/example-login.spec.ts` (logs in) — or `tests/login.spec.ts`, the template for a
@@ -141,6 +143,7 @@ pick supplies the base URL and the logins.
 | `.env` | Your logins (private, git-ignored) |
 | `runs/` | Archived past runs (local only) |
 | `demo/` | Seeded data for `npm run demo` (committed, read-only) |
+| `docs/guide/` | The user manual, served in-app at `/guide` |
 | `context/` | A fill-in template describing the app under test |
 | `plans/` | The design record — how this was built, and why |
 
@@ -149,7 +152,7 @@ pick supplies the base URL and the logins.
 ```bash
 npm start                                          # the app (http://localhost:4321)
 npm run demo                                       # read-only, seeded, zero config
-npm run start:platform                             # multi-user edition (see DEPLOY.md)
+npm run start:platform                             # team edition (see DEPLOY.md)
 npm run menu                                       # run from the terminal
 npm run record                                     # record a test from the terminal
 npm run report                                     # reopen the last report
@@ -163,9 +166,10 @@ that's what the Run page's multi-select does.
 
 ## Docs
 
-**[USER-GUIDE.md](USER-GUIDE.md)** the in-app manual · **[DEPLOY.md](DEPLOY.md)** running a real
+**[docs/guide/](docs/guide/)** the user manual · **[DEPLOY.md](DEPLOY.md)** running a real
 deployment · **[CLAUDE.md](CLAUDE.md)** how to work in this repo · **[AUDIT.md](AUDIT.md)** the
-alignment runbook · **[plans/](plans/)** the design record
+alignment runbook · **[plans/](plans/)** the design record ·
+**[docs/case-study.md](docs/case-study.md)** why it's built this way
 
 ## License
 

@@ -106,10 +106,12 @@ matches `playwright.config.ts` + `tests/helpers/fixtures.ts`.
 
 ```bash
 # no leftover company/app-specific brand strings in TRACKED files — expect zero.
-# Scans `git ls-files` rather than an --include extension list, because an
-# extension filter silently skips extensionless tracked files: a stale employer
-# name sat in LICENSE:3 while this check reported green (audit 2026-07-30).
-git grep -inE "career ?team|careeredge|spark-uat|edge tests" -- \
+# Scans `git ls-files` via `git grep` rather than a `grep -r --include` extension list: an
+# extension filter silently skips extensionless tracked files, and a stale employer name sat
+# in LICENSE:3 while this check reported green (audit 2026-07-30). Only tracked content ships.
+# Replace the alternation with YOUR OWN company name, app-under-test name and real env names
+# — this repo ships generic, so these are placeholders, not real brands.
+git grep -inE "<your-company>|<your-app>|<your-env-names>" -- \
   ':!AUDIT.md' ':!runs' ':!.claude'
 ```
 

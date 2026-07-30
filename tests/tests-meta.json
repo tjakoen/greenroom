@@ -1,10 +1,4 @@
 {
-  "tests/example-login.spec.ts::logs in as a standard user @example": {
-    "group": "Examples",
-    "priority": "P1",
-    "owner": "Greenroom",
-    "notes": "Logs into the public saucedemo store via the login('example') fixture. Zero-config green run + a template for your own login tests."
-  },
   "tests/example-nav.spec.ts::navigates the Playwright docs @example": {
     "group": "Examples",
     "priority": "P2",

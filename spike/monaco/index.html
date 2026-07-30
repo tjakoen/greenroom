@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>monaco spike</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  #editor { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div id="editor"></div>
+<script src="/vs/loader.js"></script>
+<script>
+  // Classic AMD self-host boot — no bundler. baseUrl points the loader at our static /vs/ mount
+  // (spike/monaco/serve.ts serves node_modules/monaco-editor/min/vs/ under that path).
+  require.config({ paths: { vs: '/vs' } });
+
+  const SAMPLE = [
+    "import { test, expect } from '../helpers/fixtures';",
+    "",
+    "test('user can log in @smoke', async ({ page, login }) => {",
+    "  await login('admin');",
+    "  await page.goto('/dashboard');",
+    "  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();",
+    "});",
+    "",
+  ].join("\n");
+
+  require(['vs/editor/editor.main'], function () {
+    window.editor = monaco.editor.create(document.getElementById('editor'), {
+      value: SAMPLE,
+      language: 'typescript',
+      readOnly: true,
+      automaticLayout: true,
+      theme: 'vs-dark',
+    });
+    // A flag the headless check waits on/reads, separate from DOM presence, so we can also assert
+    // Monaco actually finished initializing (not just that the loader script tag exists).
+    window.__monacoReady = true;
+  });
+</script>
+</body>
+</html>

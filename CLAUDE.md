@@ -18,7 +18,8 @@ task (Terminal → Run Task — no typing), a web page opens, they pick an envir
 typing.
 
 The interface is a **bold status-dashboard app** (sidebar + real GRAIN routes:
-Run / Tests / History / Report a bug / User guide / Settings), zero-dependency plain Node.
+Run / Tests / History / Report a bug / User guide / Settings), served by `bun server.ts` on the
+shared layer.
 Users define **roles & logins** in-app (Settings → Roles & logins: named roles mapped to one
 or more environments, credentials written to the git-ignored `.env`; values are never read
 back), run one/some/all/by-tag tests **against one or several environments at once**, get a
@@ -106,7 +107,8 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 - **Tests live flat in `tests/`**, not in per-environment folders. Never reintroduce
   `tests/<env>/` coupling — scope by `@tag`/metadata instead.
 - **Keep dependencies at the floor** — *amended by the platform.* The test-runner **core** stays
-  minimal. The **platform layer** spends the budget deliberately on a small, audited set: `drizzle-orm`
+  minimal, leaning on the shared layer (grain / mill / pantry). The **platform layer** spends the
+  budget deliberately on a small, audited set: `drizzle-orm`
   (+ `drizzle-kit` dev) over embedded `bun:sqlite`, `better-auth` (+ `@better-auth/sso`), and
   `monaco-editor` (lazy, editor page only). Each is justified in [plans/platform.md](plans/platform.md) §8.
   Add nothing else without the same bar.

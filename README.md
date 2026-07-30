@@ -4,7 +4,6 @@
 ![Playwright](https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white)
 ![Node](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
 ![Bun](https://img.shields.io/badge/Bun-000000?logo=bun&logoColor=white)
-![Zero-dep interface](https://img.shields.io/badge/interface_deps-0-2ea44f)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 A small **local app** to run automated browser checks against your web app and review the

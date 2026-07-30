@@ -188,7 +188,8 @@
     <div class="nav-links">
       <a class="ghost" href="#features">Features</a>
       <a class="ghost" href="#how">How it works</a>
-      <a href="#">GitHub</a>
+      <a class="ghost" href="case-study.html">Case study</a>
+      <a href="https://github.com/tjakoen/greenroom">GitHub</a>
     </div>
   </nav>
 </header>
@@ -198,13 +199,13 @@
   <!-- HERO -->
   <section class="hero" style="border-bottom:1px solid var(--border)">
     <div class="wrap">
-      <span class="eyebrow"><span class="dot"></span> Local · No coding required</span>
+      <span class="eyebrow"><span class="dot"></span> No coding required · Local or deployed</span>
       <h1>Browser tests without the coding.</h1>
       <p class="lead">Point it at any live web app. Click Run. Get pass/fail with screenshots, video, trace, and a one-click bug bundle. No coding.</p>
-      <p class="subtext">Runs on your computer, straight from VS Code — and a zero-config demo means it looks alive the moment you clone it.</p>
+      <p class="subtext">Runs on your own machine straight from VS Code, or deployed for a whole team behind a URL — and a zero-config demo means it looks alive the moment you clone it.</p>
       <div class="cta-row">
-        <a class="btn primary" href="#">View on GitHub</a>
-        <a class="btn" href="#">Try the demo</a>
+        <a class="btn primary" href="https://github.com/tjakoen/greenroom">View on GitHub</a>
+        <a class="btn" href="#run-it">Try the demo</a>
       </div>
     </div>
   </section>
@@ -273,6 +274,18 @@
           <p>VS Code tasks do the work. A non-coder opens the folder, picks a task, and clicks Run — no terminal, no scripts, no setup ceremony.</p>
         </div>
 
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 18l-5-6 5-6"/><path d="M15 6l5 6-5 6"/></svg></div>
+          <h3>Edit tests in the browser</h3>
+          <p>Open any test in a real code editor inside the app, with validation before it saves — so a small fix never needs a checkout or a toolchain.</p>
+        </div>
+
+        <div class="card">
+          <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 19a6 6 0 0 1 12 0"/><path d="M16 15a5 5 0 0 1 5 4"/></svg></div>
+          <h3>One person, or a whole team</h3>
+          <p>The same codebase runs as a local single-user tool or as a deployed instance behind a URL — real accounts, teams, per-resource visibility and a queue for concurrent runs.</p>
+        </div>
+
       </div>
     </div>
   </section>
@@ -324,18 +337,27 @@
           <div class="frame"><img src="shots/matrix.png" alt="A test-by-environment matrix showing pass/fail per environment for a multi-environment run"></div>
           <figcaption>The multi-environment matrix — tests down, environments across.</figcaption>
         </figure>
+        <figure>
+          <div class="frame"><img src="shots/tests.png" alt="The Tests page listing every check with tags, groups and filters"></div>
+          <figcaption>The Tests library — tags, groups and smart filters.</figcaption>
+        </figure>
+        <figure>
+          <div class="frame"><img src="shots/editor.png" alt="Editing a Playwright test in the in-browser code editor"></div>
+          <figcaption>The in-browser editor — fix a test without a checkout.</figcaption>
+        </figure>
       </div>
     </div>
   </section>
 
   <!-- CALLOUT -->
-  <section>
+  <section id="run-it">
     <div class="wrap">
       <div class="callout">
-        <p class="kicker" style="margin:0">Runs locally</p>
+        <p class="kicker" style="margin:0">Try it</p>
         <h2 style="font-size:clamp(22px,3vw,28px);letter-spacing:-0.02em;margin:2px 0 6px;font-weight:640">Open the folder in VS Code and press Run.</h2>
         <p style="color:var(--text-soft);margin:0 0 4px;max-width:60ch">Non-coders never touch a terminal. Prefer commands? They're there too:</p>
-        <p style="margin:0"><code>npm start</code> opens the app at <code>localhost:4321</code> · <code>npm run demo</code> launches the zero-config demo.</p>
+        <p style="margin:0"><code>npm run demo</code> boots a populated, read-only dashboard with zero config · <code>npm start</code> opens the real app at <code>localhost:4321</code></p>
+        <p style="color:var(--text-mute);margin:8px 0 0;font-size:13.5px">Cloning it yourself? Some of Greenroom's building blocks are published privately, so <code>bun install</code> needs a GitHub token with <code>read:packages</code> — the <a href="https://github.com/tjakoen/greenroom#first-time-once">README</a> walks through it.</p>
       </div>
     </div>
   </section>
@@ -345,7 +367,7 @@
 <footer>
   <div class="wrap foot">
     <span class="brand"><span class="logo" aria-hidden="true"></span> Greenroom</span>
-    <span>Open source · Runs locally · No data leaves your machine</span>
+    <span>Open source (MIT) · <a href="https://github.com/tjakoen/greenroom">GitHub</a> · <a href="case-study.html">Case study</a></span>
   </div>
 </footer>
 

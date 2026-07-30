@@ -105,8 +105,10 @@ The sync table in [CLAUDE.md](CLAUDE.md) is the contract. Spot-check the high-dr
 matches `playwright.config.ts` + `tests/helpers/fixtures.ts`.
 
 ```bash
-# no leftover company/app-specific brand strings in committed files — expect zero
-grep -rinE "career ?team|careeredge|spark-uat|edge tests" \
+# no leftover company/app-specific brand strings in committed files — expect zero.
+# Replace the alternation with YOUR OWN company name, app-under-test name, and real env
+# names before running (this repo ships generic — these are placeholders, not real brands).
+grep -rinE "<your-company>|<your-app>|<your-env-names>" \
   --include='*.md' --include='*.ts' --include='*.js' --include='*.json' --include='*.html' --include='*.css' \
   --exclude-dir=node_modules --exclude-dir=runs --exclude-dir=.claude . \
   | grep -vE "config/urls\.json|AUDIT\.md"

@@ -9,7 +9,7 @@
 // as a byte-identical fallback has been deleted; its endpoints live on unchanged below every
 // GRAIN page (same request/response shapes the SPA used, so nothing downstream had to change).
 import { join, basename, dirname } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { bunRuntime } from "@tjakoen/batch/platform/bun-runtime.ts";
 import { makeStatic } from "@tjakoen/batch/http/static.ts";
@@ -130,8 +130,9 @@ const NAV: Array<{ key: string; label: string; href: string; icon: string; foote
   { key: "environments", label: "Environments", href: "/environments", icon: "rules", platform: true },
   { key: "accounts", label: "Accounts", href: "/accounts", icon: "pin", platform: true },
   { key: "guide", label: "User guide", href: "/guide", icon: "knowledge" },
-  { key: "plans", label: "Plans", href: "/plans", icon: "files" },
-  { key: "catalog", label: "Catalog", href: "/catalog", icon: "spark" },
+  // Plans is a footer link (developer/PROOF surface, not a primary task). Catalog is intentionally
+  // NOT in the rail — it's the grain component gallery, served at /catalog but unlisted.
+  { key: "plans", label: "Plans", href: "/plans", icon: "files", footer: true },
   { key: "admin", label: "Admin", href: "/admin", icon: "settings", footer: true, platform: true },
   { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true, local: true },
 ];
@@ -161,7 +162,8 @@ function icon(sym: string, size?: "sm" | "lg"): string {
 function railNav(active?: string): string {
   const item = (n: (typeof NAV)[number]): string => {
     const current = n.key === active ? ` aria-current="page"` : "";
-    return `<a class="nav-item" href="${escapeHtml(n.href)}"${current}>${icon(n.icon)}` +
+    // data-surface makes each rail entry an addressable CRUMB tour surface (`nav:/run`, …).
+    return `<a class="nav-item" href="${escapeHtml(n.href)}" data-surface="nav:${escapeHtml(n.href)}"${current}>${icon(n.icon)}` +
       `<span class="nav-item__label">${escapeHtml(n.label)}</span></a>`;
   };
   const main = VISIBLE_NAV.filter((n) => !n.footer).map(item).join("\n    ");
@@ -178,21 +180,54 @@ function railNav(active?: string): string {
 //     the body, same order pantry.ts uses.
 //   - data-aside-hidden="true": P2 ships no assistant pane (the AI door is PG) — collapses the
 //     app-shell's reserved aside column to 0 instead of leaving a dead 20rem gap on the right.
+// First-load onboarding modal — shown once (localStorage `gr_welcomed`), reassures a non-coder that
+// the tool is private, and offers the CRUMB guided tour when it's installed. Copy is accurate per
+// edition: local runs entirely on the user's machine; platform runs on the company's own server.
+function welcomeModal(): string {
+  const privacy = IS_PLATFORM
+    ? "Greenroom runs on your team&rsquo;s own server. Your logins are stored encrypted, results stay inside your company, and nothing is ever sent to anyone else."
+    : "Greenroom runs entirely on your own computer. Your logins and test results stay on this machine. Nothing is uploaded, synced, or sent anywhere.";
+  const tourBtn = crumbHead
+    ? `<button class="btn" data-variant="primary" data-crumb-start="welcome" data-gr-welcome-dismiss>Take a quick tour</button>`
+    : "";
+  return `<div id="gr-welcome" class="gr-welcome" hidden role="dialog" aria-modal="true" aria-labelledby="gr-welcome-title">
+    <div class="gr-welcome__card">
+      <h2 id="gr-welcome-title" class="gr-welcome__title">Welcome to Greenroom</h2>
+      <p class="gr-welcome__body">${privacy}</p>
+      <p class="gr-welcome__hint">Point it at your site, say how to log in, and click Run. You&rsquo;ll get pass/fail with screenshots, video, and logs, plus a one-click bug bundle to hand a developer.</p>
+      <div class="gr-welcome__actions">
+        ${tourBtn}
+        <button class="btn" data-variant="${crumbHead ? "soft" : "primary"}" data-gr-welcome-dismiss>Get started</button>
+      </div>
+    </div>
+  </div>
+  <script>(function(){
+    try { if (localStorage.getItem("gr_welcomed")) return; } catch (e) {}
+    var el = document.getElementById("gr-welcome");
+    if (!el) return;
+    el.hidden = false;
+    function dismiss(){ el.hidden = true; try { localStorage.setItem("gr_welcomed", "1"); } catch (e) {} }
+    el.addEventListener("click", function(e){
+      if (e.target === el || e.target.closest("[data-gr-welcome-dismiss]")) dismiss();
+    });
+  })();</script>`;
+}
+
 function grainPage(title: string, body: string, opts: { active?: string } = {}): string {
   const active = opts.active;
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="baguette" data-crumb-prefix="/crumb">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} · Greenroom</title>
   <script src="/scripts/theme-boot.js"></script>
   ${styleLinks}
+  ${crumbHead}
 </head>
-<body class="app-window-backdrop">
-  <div class="app-shell app-window" data-aside-hidden="true">
+<body>
+  <div class="app-shell" data-aside-hidden="true">
     <header class="app-shell__window window-bar">
-      <span class="window-bar__dots"><i></i><i></i><i></i></span>
       <span class="window-bar__ctl">
         <button type="button" class="icon-btn" data-variant="ghost" data-cycle-theme title="Cycle theme" aria-label="Cycle theme">◆</button>
         <button type="button" class="icon-btn" data-variant="ghost" data-toggle-scheme title="Light / dark" aria-label="Light / dark">◐</button>
@@ -204,12 +239,13 @@ function grainPage(title: string, body: string, opts: { active?: string } = {}):
       <div class="side-rail__brand">${icon("spark")}<span>Greenroom</span></div>
       ${railNav(active)}
     </aside>
-    <main class="app-shell__main">${body}</main>
+    <main class="app-shell__main" data-surface="screen">${body}</main>
     <footer class="app-shell__status status-bar">
       <span class="status-bar__spacer"></span>
       <span class="made-with" data-status-optional>built on GRAIN</span>
     </footer>
   </div>
+  ${welcomeModal()}
   <div id="toast" class="gr-toast" role="status" aria-live="polite"></div>
   <script src="/scripts/shell.js" defer></script>
   <script src="/scripts/theme.js" defer></script>
@@ -225,10 +261,25 @@ const proofRoutes = createProofRoutes({
   chrome: (title, body) => grainPage(`${title} · Plans`, `<div class="board">${body}</div>`, { active: "plans" }),
 });
 
-// --- MILL: user guide (USER-GUIDE.md) at /guide, app-under-test context docs at /context. ---
+// --- MILL: user guide (docs/guide/*.md) at /guide, app-under-test context docs at /context. ---
+// The guide is EDITION-AWARE: the `local` and `team` start pages are each shown only in their own
+// edition; the shared how-to pages (writing-checks, reporting-bugs, faq) show in both. Ordered so
+// the current edition's start page leads. Each doc leads with its own `# Title` (see bodyOnlyLayout).
+const GUIDE_DIR = join(HERE, "docs", "guide");
+const GUIDE_ORDER = [IS_PLATFORM ? "team" : "local", "writing-checks", "reporting-bugs", "faq"];
 const guideSource: ContentSource = {
-  list: async () => ["user-guide"],
-  read: async (slug) => (slug === "user-guide" ? await Bun.file(join(HERE, "USER-GUIDE.md")).text() : null),
+  list: async () => {
+    const present = new Set(readdirSync(GUIDE_DIR).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)));
+    // Never surface the OTHER edition's start page.
+    present.delete(IS_PLATFORM ? "local" : "team");
+    return GUIDE_ORDER.filter((s) => present.has(s));
+  },
+  read: async (slug) => {
+    if (!/^[a-z0-9-]+$/.test(slug)) return null; // path-traversal guard
+    if (slug === (IS_PLATFORM ? "local" : "team")) return null; // hide the other edition's page
+    const f = join(GUIDE_DIR, `${slug}.md`);
+    return existsSync(f) ? await Bun.file(f).text() : null;
+  },
 };
 // USER-GUIDE.md (and each context doc) leads with its OWN `# Title` heading, so MILL's default
 // note masthead would re-emit the same title under our chrome and double it. Render the body
@@ -248,6 +299,30 @@ const millRoutes = createMillRoutes({
     },
   ],
 });
+
+// --- CRUMB: guided tours (tours/*.md) — a read-only projection mounted at /crumb (both editions).
+// OPTIONAL dependency: if @tjakoen/crumb isn't installed the app still boots with tours simply
+// disabled (the head tags + routes go dark). Install with `bun add @tjakoen/crumb` (GitHub Packages,
+// needs GITHUB_TOKEN with read:packages — see .npmrc / DEPLOY.md). crumb-live.js resolves surfaces
+// via `[data-surface="…"]` in the rendered pages; tours start on a `[data-crumb-start="<id>"]` click.
+let crumbRoutes: ((pathname: string) => Promise<Response | null>) | null = null;
+let crumbHead = "";
+let crumbLivePath = "";
+let crumbCssPath = "";
+try {
+  // Variable specifier (not a literal) so tsc treats @tjakoen/crumb as an OPTIONAL dep — the
+  // composition-root typecheck stays green whether or not it's installed; it's resolved at runtime.
+  const crumbSpec = "@tjakoen/crumb/routes.ts";
+  const { createCrumbRoutes } = (await import(crumbSpec)) as {
+    createCrumbRoutes: (deps: { toursDir: string; prefix?: string }) => (pathname: string) => Promise<Response | null>;
+  };
+  crumbRoutes = createCrumbRoutes({ toursDir: join(HERE, "tours") });
+  crumbLivePath = fileURLToPath(import.meta.resolve("@tjakoen/crumb/crumb-live.js"));
+  crumbCssPath = fileURLToPath(import.meta.resolve("@tjakoen/crumb/crumb.css"));
+  crumbHead = `<link rel="stylesheet" href="/crumb.css">\n  <script type="module" src="/crumb-live.js"></script>`;
+} catch {
+  console.warn("[server] @tjakoen/crumb not installed — guided tours disabled. Enable with: bun add @tjakoen/crumb");
+}
 
 // ---------------------------------------------------------------------- helpers
 /** Parse a JSON request body, or {} on empty/invalid (mirrors server.js readBody). */
@@ -370,12 +445,17 @@ async function handle(req: Request): Promise<Response> {
     }
   }
 
-  // The single-doc guide is served at /guide by MILL (which lists it as /guide/user-guide).
-  const millPath = p === "/guide" ? "/guide/user-guide" : p;
   const fromProof = await proofRoutes(p);
   if (fromProof) return fromProof;
-  const fromMill = await millRoutes(millPath);
+  // /guide is MILL's edition-aware index (local/team start page + shared how-to pages);
+  // /guide/<slug> renders one doc. No remap — MILL serves the index at the bare prefix.
+  const fromMill = await millRoutes(p);
   if (fromMill) return fromMill;
+  // CRUMB tour data (GET /crumb/tours.json + /crumb/tours/<id>.json) — read-only, both editions.
+  if (crumbRoutes) {
+    const fromCrumb = await crumbRoutes(p);
+    if (fromCrumb) return fromCrumb;
+  }
 
   // ---- GRAIN shell assets (P2): styles/scripts/component-CSS/icon sprite + the catalog ----
   const htmlHeaders = { "Content-Type": "text/html; charset=utf-8" };
@@ -387,6 +467,9 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/favicon.ico") return new Response(null, { status: 204 });
   if (p === "/components.css") return new Response(await componentCss.css(), { headers: { "Content-Type": "text/css" } });
   if (p === "/greenroom.css") return serveStatic(join(HERE, "pages", "greenroom.css"));
+  // CRUMB client assets (self-hosted from the package, like monaco) — only when installed.
+  if (p === "/crumb-live.js" && crumbLivePath) return serveStatic(crumbLivePath);
+  if (p === "/crumb.css" && crumbCssPath) return serveStatic(crumbCssPath);
   if (p === "/catalog") return new Response(await catalog.html(), { headers: htmlHeaders });
   if (p === "/search.json") {
     const pages = VISIBLE_NAV.map((n) => ({ title: n.label, url: n.href }));
@@ -699,8 +782,9 @@ async function handle(req: Request): Promise<Response> {
 
   // ---- guide + onboarding (the SPA's own raw endpoints; MILL /guide is a separate human route) ----
   if (p === "/api/guide") {
-    const md = readFileMaybe(join(ROOT, "USER-GUIDE.md"));
-    return new Response(md || "# Guide\n\nUSER-GUIDE.md is missing.", { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+    // Legacy raw-markdown endpoint — serve the current edition's start guide (see docs/guide/).
+    const md = readFileMaybe(join(GUIDE_DIR, `${IS_PLATFORM ? "team" : "local"}.md`));
+    return new Response(md || "# Guide\n\nGuide is missing.", { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
   }
   if (p === "/api/onboarding") return json(onboardingState());
 

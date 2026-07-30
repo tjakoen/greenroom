@@ -59,7 +59,8 @@ environment's `baseURL` applies.
    NOTE-STANDARD, README-STANDARD). These are the cross-repo single source; this repo **references**
    them and never forks them. Read the index first, then fetch only the one the task needs.
 2. **[README.md](README.md)** — the user-facing guide (how they actually use the app).
-   The in-app version is **[USER-GUIDE.md](USER-GUIDE.md)** (task-based; served at `/api/guide`).
+   The in-app version is the **edition-aware guide** in **[docs/guide/](docs/guide/)** (`local`/`team`
+   start pages + shared how-to pages; rendered by MILL at `/guide`, raw at `/api/guide`).
 3. **[context/frontend-structure.md](context/frontend-structure.md)** + **[context/sitemap.md](context/sitemap.md)** — the fill-in-the-blank map of the app under test.
 
 **Single sources of truth:**
@@ -167,7 +168,7 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 | **Demo mode** (read-only seeded clone) | `lib/paths.ts` `IS_DEMO = process.env.GREENROOM_DEMO === '1'` swaps each read boundary to the committed `demo/` dir (state/results/runs/tests-meta/roles/artifacts) and **guards every write endpoint** (run/record/env/cred/roles) → `{ ok:false, demo:true }` ↔ the shell's "Demo" sidebar badge + disabled write buttons across `pages/*.js`. `npm run demo` = `GREENROOM_DEMO=1 npm start`, mirrored as the **🎬 Open Demo** VS Code task. Keep `demo/` small and free of PII/real URLs |
 | **The Examples group** (zero-config onboarding specs) | committed `@example` specs in `tests/` (saucedemo login, playwright.dev nav, wikipedia search, one intentional failure) + committed `tests/tests-meta.json` seed (`group: "Examples"`) + `config/roles.example.json` (`example` role) + `config/urls.example.json` demo envs + the `example` public-cred default in `users/roles.ts`. `example-login` is self-contained |
 | **The features / landing page** | standalone `docs/index.html` (GitHub Pages ready; self-contained, inlined CSS + embedded shots). Keep its feature list in step with README |
-| **The in-app user manual** | `USER-GUIDE.md` — served raw at `/api/guide` (also rendered as a real page by MILL at `/guide`). Keep in step with `README.md` |
+| **The in-app user manual** | `docs/guide/*.md` — edition-aware: `local.md`/`team.md` start pages (each shown only in its own edition via `guideSource` in `server.ts`) + shared `writing-checks.md`/`reporting-bugs.md`/`faq.md`. Rendered by MILL at `/guide`, raw at `/api/guide`. Guide docs cross-link with `/guide/<slug>` paths; keep in step with `README.md`. **em-dash-free + VOICE** (public repo). |
 | **A user-facing command** (npm script) | mirror it in `.vscode/tasks.json` (the no-typing task) → README |
 | **What/where tests capture** (video, screenshots, console, network, trace) | `playwright.config.ts` (`use`/`CAPTURE`) + `tests/helpers/fixtures.ts`. Fixtures record: a **filmstrip** of screenshots (on load, `framenavigated`, a 1s interval, and debounced after each click/input/submit via `addInitScript`+`__grSnap`; capped `CAP`, fewer in `CAPTURE=light`) each with a `t`; console (`consoleTimed`); network **issues** (`networkTimed`) and the **full request log** (`requests`: `{t,method,status,url,type,failed?}`, capped 3000) → README "What gets captured" |
 | **The app under test (new route/feature)** | `context/sitemap.md` and/or `context/frontend-structure.md` — the map, since the app's source isn't here |

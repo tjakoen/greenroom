@@ -40,5 +40,7 @@ allowed to see. A private check's results stay private to its owner.
 ## Next
 
 - [Writing and recording checks](/guide/writing-checks): add the checks your team needs.
+- [Bringing in tests you already have](/guide/existing-tests): import checks from another
+  Greenroom, or adapt Playwright scripts your team already wrote.
 - [Reporting a bug](/guide/reporting-bugs): hand a developer one file with everything in it.
 - [Safety, speed, and FAQ](/guide/faq): how data is stored, how to run faster.

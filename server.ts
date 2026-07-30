@@ -279,7 +279,7 @@ const proofRoutes = createProofRoutes({
 // edition; the shared how-to pages (writing-checks, reporting-bugs, faq) show in both. Ordered so
 // the current edition's start page leads. Each doc leads with its own `# Title` (see bodyOnlyLayout).
 const GUIDE_DIR = join(HERE, "docs", "guide");
-const GUIDE_ORDER = [IS_PLATFORM ? "team" : "local", "writing-checks", "reporting-bugs", "faq"];
+const GUIDE_ORDER = [IS_PLATFORM ? "team" : "local", "writing-checks", "existing-tests", "reporting-bugs", "faq"];
 const guideSource: ContentSource = {
   list: async () => {
     const present = new Set(readdirSync(GUIDE_DIR).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)));

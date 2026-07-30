@@ -51,6 +51,7 @@ The in-app guide adapts to whichever edition you're running. Reading order:
 - **Building on the code?** → **[CLAUDE.md](CLAUDE.md)**.
 
 Both guides link the same how-to pages: [writing checks](docs/guide/writing-checks.md) ·
+[bringing in tests you already have](docs/guide/existing-tests.md) ·
 [reporting a bug](docs/guide/reporting-bugs.md) · [safety and FAQ](docs/guide/faq.md).
 
 ---

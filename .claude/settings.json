@@ -1,4 +1,20 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git rebase *)",
+      "Bash(grep -n *)",
+      "Bash(GIT_EDITOR=true git rebase --continue)",
+      "Bash(GIT_EDITOR=true /usr/bin/git rebase --continue)",
+      "Bash(/usr/bin/git log *)",
+      "Bash(/usr/bin/git status *)",
+      "Bash(/usr/bin/git stash *)",
+      "Bash(/usr/bin/git diff *)",
+      "Bash(/usr/bin/git add *)",
+      "Bash(/usr/bin/git commit *)",
+      "Bash(/usr/bin/git push *)"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {

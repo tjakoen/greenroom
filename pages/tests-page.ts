@@ -53,6 +53,7 @@ export function testsBody(): string {
         <button class="btn" data-size="sm" type="button" id="exportBtn" title="Download selected tests (or all) as a .zip to share">Export</button>
         <button class="btn" data-size="sm" type="button" id="importBtn" title="Import tests from a shared .zip">Import</button>
         <input type="file" id="importFile" accept=".zip,application/zip" hidden>
+        <button class="btn" data-size="sm" type="button" id="adaptBtn" title="Copied your own Playwright files into tests/? This makes them work here: no editing required">Make my tests work here</button>
         <button class="btn" data-size="sm" data-status="danger" type="button" id="deleteSelectedBtn" disabled>Delete selected</button>
       </div>
     </div>

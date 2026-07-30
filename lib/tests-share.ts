@@ -12,6 +12,8 @@ import { inflateRawSync } from "node:zlib";
 import { ROOT, TESTS_DIR, META_FILE } from "./paths.ts";
 import { zipStore, type ZipEntry } from "./zip.ts";
 import { loadMeta, metaKey, specFiles } from "./tests-lib.ts";
+import { envNames, baseURLof } from "./envs.ts";
+import { adaptSpec, type AdaptNote } from "./adapt.ts";
 
 const MANIFEST = "greenroom-tests.json";
 
@@ -122,6 +124,12 @@ export interface ImportResult {
   skipped: string[]; // existed already (not overwritten)
   rejected: string[]; // unsafe path / wrong type
   metaMerged: number;
+  /** Specs we auto-adapted on the way in (lib/adapt.ts) — the "no coding required" half of
+   *  import: a foreign Playwright spec is made Greenroom-native without the user opening a file. */
+  adapted: string[];
+  /** Per-file things the user still has to do (a role to create, an off-site address). Never
+   *  silently "fixed", because guessing at sign-in code breaks checks. */
+  attention: { file: string; notes: AdaptNote[] }[];
 }
 
 /** Import a shareable .zip: write its spec + helper files into tests/ and merge the manifest's
@@ -131,7 +139,12 @@ export function importTests(buf: Buffer, opts: { overwrite?: boolean } = {}): Im
   const written: string[] = [];
   const skipped: string[] = [];
   const rejected: string[] = [];
+  const adapted: string[] = [];
+  const attention: { file: string; notes: AdaptNote[] }[] = [];
   let manifest: Manifest | null = null;
+  // Resolved once, not per entry: the user's configured sites, so a spec hardcoded to one of them
+  // becomes portable. Unknown hosts are reported rather than rewritten (see lib/adapt.ts).
+  const baseURLs = envNames().map((n) => baseURLof(n) || "").filter(Boolean);
 
   for (const e of raw) {
     if (e.name === MANIFEST) {
@@ -143,7 +156,17 @@ export function importTests(buf: Buffer, opts: { overwrite?: boolean } = {}): Im
     const abs = join(ROOT, rel);
     if (existsSync(abs) && !opts.overwrite) { skipped.push(rel); continue; }
     mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, e.data);
+    // Adapt specs on the way in so a foreign Playwright file is runnable here with no hand-edits.
+    // Helpers are copied verbatim: they are not specs, and rewriting their imports could break
+    // code the spec depends on. A spec already written for Greenroom simply reports no changes.
+    if (rel.endsWith(".spec.ts")) {
+      const r = adaptSpec(e.data.toString("utf8"), rel, baseURLs);
+      writeFileSync(abs, r.code);
+      if (r.changed) adapted.push(rel);
+      if (r.attention.length) attention.push({ file: rel, notes: r.attention });
+    } else {
+      writeFileSync(abs, e.data);
+    }
     written.push(rel);
   }
 
@@ -163,7 +186,32 @@ export function importTests(buf: Buffer, opts: { overwrite?: boolean } = {}): Im
     if (metaMerged) writeFileSync(META_FILE, JSON.stringify(meta, null, 2) + "\n");
   }
 
-  return { ok: true, written, skipped, rejected, metaMerged };
+  return { ok: true, written, skipped, rejected, metaMerged, adapted, attention };
+}
+
+/** Adapt specs ALREADY sitting in tests/ (copied in by hand, or written before this existed).
+ *  Same transform as import, applied in place — the no-editor path for "I dropped my files in".
+ *  `rels` empty means every spec. Returns the same adapted/attention shape as importTests. */
+export function adaptExisting(rels?: string[]): {
+  ok: true;
+  adapted: string[];
+  unchanged: string[];
+  attention: { file: string; notes: AdaptNote[] }[];
+} {
+  const targets = (rels?.length ? rels.map(safeShareRel).filter((r): r is string => !!r) : allSpecRels())
+    .filter((r) => r.endsWith(".spec.ts"));
+  const baseURLs = envNames().map((n) => baseURLof(n) || "").filter(Boolean);
+  const adapted: string[] = [];
+  const unchanged: string[] = [];
+  const attention: { file: string; notes: AdaptNote[] }[] = [];
+  for (const rel of targets) {
+    const abs = join(ROOT, rel);
+    if (!existsSync(abs)) continue;
+    const r = adaptSpec(readFileSync(abs, "utf8"), rel, baseURLs);
+    if (r.changed) { writeFileSync(abs, r.code); adapted.push(rel); } else unchanged.push(rel);
+    if (r.attention.length) attention.push({ file: rel, notes: r.attention });
+  }
+  return { ok: true, adapted, unchanged, attention };
 }
 
 /** All exportable spec files (ROOT-relative) — used when the UI exports "all". */

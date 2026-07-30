@@ -328,11 +328,47 @@
     if (!r.ok) return toast(r.error || 'Import failed.');
     const parts = [];
     if (r.written.length) parts.push(`${r.written.length} added`);
+    if (r.adapted && r.adapted.length) parts.push(`${r.adapted.length} adapted to run here`);
     if (r.skipped.length) parts.push(`${r.skipped.length} skipped (already here)`);
     if (r.rejected.length) parts.push(`${r.rejected.length} rejected`);
     if (r.metaMerged) parts.push(`${r.metaMerged} settings merged`);
     toast('Imported: ' + (parts.join(', ') || 'nothing new') + '.');
+    showAdaptNotes(r.attention);
     selectedKeys.clear();
+    loadTests();
+  }
+
+  // The things the import/adapt step deliberately did NOT rewrite (a sign-in it cannot guess, an
+  // address that is not one of your sites). Shown in the page notice rather than a toast, because
+  // each one is an action the user has to take and a toast disappears.
+  function showAdaptNotes(attention) {
+    const n = $('testsNotice');
+    if (!n) return;
+    if (!attention || !attention.length) { n.hidden = true; n.innerHTML = ''; return; }
+    const items = attention.map((a) => {
+      const lines = a.notes.map((x) => `<li>${esc(x.detail)}${x.line ? ` <span class="cat-intro">(line ${x.line})</span>` : ''}</li>`).join('');
+      return `<li><strong>${esc(a.file.split('/').pop())}</strong><ul>${lines}</ul></li>`;
+    }).join('');
+    n.innerHTML = `<p style="margin:0 0 6px"><strong>Almost ready.</strong> These checks run, but need one thing from you:</p><ul>${items}</ul>`;
+    n.hidden = false;
+  }
+
+  // "Make my tests work here": adapt specs already sitting in tests/ (dragged in rather than
+  // imported). Selection-scoped when something is ticked, otherwise every spec.
+  async function adaptMyTests() {
+    const files = selectedFiles();
+    const r = await api('/api/tests/adapt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: files.length ? files : undefined }),
+    }).catch(() => null);
+    if (!r) return toast('Could not adapt those tests.');
+    if (r.demo) return;
+    if (!r.ok) return toast(r.error || 'Could not adapt those tests.');
+    toast(r.adapted.length
+      ? `Adapted ${r.adapted.length} test${r.adapted.length === 1 ? '' : 's'} to run here.`
+      : 'Nothing to change: those tests already work here.');
+    showAdaptNotes(r.attention);
     loadTests();
   }
   async function runByTag() { if (!activeTags.size) return; goRun(); }
@@ -415,6 +451,7 @@
     $('runSelectedBtn').addEventListener('click', runSelected);
     $('deleteSelectedBtn').addEventListener('click', deleteSelected);
     $('exportBtn').addEventListener('click', exportTests);
+    $('adaptBtn').addEventListener('click', adaptMyTests);
     $('importBtn').addEventListener('click', () => $('importFile').click());
     $('importFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; importTests(f); });
     $('recordForm').addEventListener('submit', (e) => {

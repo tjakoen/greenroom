@@ -38,7 +38,7 @@ import {
   specFiles, recordedInputs, applyInputs,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
-import { exportTests, importTests, allSpecRels } from "./lib/tests-share.ts";
+import { exportTests, importTests, allSpecRels, adaptExisting } from "./lib/tests-share.ts";
 import { canReadRun, canControlRun } from "./lib/run-scope.ts";
 import { startRun, stopRun as stopLegacy, killProc } from "./lib/runner.ts";
 import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue, QueueFullError } from "./lib/run-queue.ts";
@@ -775,6 +775,14 @@ async function handle(req: Request): Promise<Response> {
     } catch (err: any) {
       return json({ ok: false, error: `Could not read that zip: ${err?.message ?? String(err)}` }, 400);
     }
+  }
+  // "Make my tests work here" for specs already in tests/ (copied in by hand rather than imported).
+  // Same transform import runs, applied in place — the point is that adapting a foreign Playwright
+  // spec never requires opening an editor. Empty `files` adapts every spec.
+  if (p === "/api/tests/adapt" && method === "POST") {
+    if (IS_DEMO) return okOr(denyInDemo, 409);
+    const { files } = await readBody(req);
+    return json(adaptExisting(Array.isArray(files) ? files : undefined));
   }
   if (p === "/api/test-meta" && method === "POST") {
     const { file, title, group, priority, owner, notes } = await readBody(req);

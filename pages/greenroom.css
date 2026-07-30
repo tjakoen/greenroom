@@ -5,7 +5,7 @@
    in the shell composes from grain primitives (app-shell, side-rail, card, field, btn, badge…)
    untouched. Success/danger stay monochrome (ink levels) — this sheet adds no hue of its own. */
 
-/* P2 ships no aside/console region (the AI door is PG, see PLAN.md) — the app-shell grid always
+/* P2 ships no aside/console region (the AI door is PG, see plans/bread-migration.md) — the app-shell grid always
    reserves a --shell-console-min floor for the console row even when no .app-shell__console
    element is rendered (app-shell.css has no :has() guard for "console absent", unlike the aside,
    which DOES collapse via [data-aside-hidden]). Zero the floor so an empty strip doesn't sit

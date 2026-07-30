@@ -14,7 +14,7 @@ owner: human
 > repo's history: it **overturns four CLAUDE.md non-negotiables** — local-only, zero-dep,
 > VS Code as entry point, **and (undecided) the open-source generic-starter identity** (§0.5).
 > Those rules get rewritten when Phase 1 lands — deliberately, not by drift. This plan sits
-> alongside the in-progress BREAD migration (`PLAN.md`); see §9 for the dependency between
+> alongside the in-progress BREAD migration (`plans/bread-migration.md`); see §9 for the dependency between
 > them. Per the repo's own rule (no org names in committed files), this plan says "the
 > company" throughout — the deployment target is the single company that operates it.
 
@@ -392,14 +392,14 @@ the Editor page only, so the rest of the app stays light.
 
 ---
 
-## 9. Relationship to the in-progress BREAD migration (`PLAN.md`)
+## 9. Relationship to the in-progress BREAD migration (`plans/bread-migration.md`)
 
 - The BREAD migration (P1–P6) landed the GRAIN shell + real routes; P6 (cutover, delete
   `interface/`) is **done** — `interface/` is gone, `/` now renders the Run page. This platform
   plan assumes the **GRAIN stack** (it builds new pages as `pages/*` + `server.ts` routes); the
   `depends: [p6-cutover]` gate in this plan's frontmatter is satisfied.
-- After this plan lands, `PLAN.md`'s "local-only / zero-dep / loopback" invariants are superseded by
-  §0 here; update both `PLAN.md` and `CLAUDE.md` in the same change that ships Phase 1.
+- After this plan lands, `plans/bread-migration.md`'s "local-only / zero-dep / loopback" invariants are superseded by
+  §0 here; update both `plans/bread-migration.md` and `CLAUDE.md` in the same change that ships Phase 1.
 
 ---
 

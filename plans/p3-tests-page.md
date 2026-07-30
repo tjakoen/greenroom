@@ -1,6 +1,6 @@
 ---
 id: p3-tests-page
-status: todo
+status: done
 track: migration
 depends: [p2-grain-shell]
 touches: [pages/tests, components/]

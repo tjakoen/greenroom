@@ -1,6 +1,6 @@
 ---
 id: p5-history-bug-report
-status: todo
+status: done
 track: migration
 depends: [p4-run-page]
 touches: [pages/history, pages/bug, components/]

@@ -100,7 +100,7 @@ interface CredEntry {
 // `<ROLE>_USERNAME/PASSWORD` fallback) — `envNames` is the list of environments already imported
 // in step 1, so this never needs to know any concrete env or role name up front. Longest env-name
 // prefix wins first, so an env name that happens to be a prefix of another (e.g. "demo" vs.
-// "demo-stage") doesn't mis-attribute a shared/other-env credential.
+// "staging") doesn't mis-attribute a shared/other-env credential.
 function parseCredentialEntries(envText: string, envNames: string[]): CredEntry[] {
   const dot = parseEnvText(envText);
   const sortedEnvs = [...envNames].sort((a, b) => b.length - a.length);
@@ -119,7 +119,7 @@ function parseCredentialEntries(envText: string, envNames: string[]): CredEntry[
     let envName: string | null = null;
     let roleBase = base;
     for (const name of sortedEnvs) {
-      const prefix = envPrefix(name); // e.g. "demo-stage" -> "DEMO_STAGE_"
+      const prefix = envPrefix(name); // e.g. "staging" -> "STAGING_"
       if (base.startsWith(prefix)) {
         envName = name;
         roleBase = base.slice(prefix.length);

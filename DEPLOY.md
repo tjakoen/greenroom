@@ -42,7 +42,8 @@ Residual risk / must-do before exposure (do NOT skip):
 - **Node.js + Playwright browsers** — the run queue spawns `npx playwright test`; Chromium is
   installed by the `postinstall`.
 - A **reverse proxy** (nginx / Caddy) terminating TLS in front of the app.
-- This checkout's **`node_modules`** — see *Install* below (a fresh clone can't reinstall yet).
+- A **GitHub token** with `read:packages` — the `@tjakoen` shared layer is published to GitHub
+  Packages, not npmjs, so installing needs it. See *Install* below.
 
 ## Environment variables
 
@@ -61,7 +62,7 @@ Set these in the process environment (systemd unit, container env, etc.) — nev
 | `PORT` | — | Listen port (default 4321). |
 | `ALLOWED_HOSTS` | yes | Comma-separated hostname(s) the instance is served on, e.g. `greenroom.example.com`. The guard rejects any other `Host`/cross-origin write. Unset → loopback-only. |
 | `BETTER_AUTH_SECRET` | yes | Signing secret for sessions. Generate a long random value; losing/rotating it logs everyone out. |
-| `BETTER_AUTH_URL` | yes | The public base URL, e.g. `https://greenroom.example.com` (used for cookies + the SSO callback). |
+| `BETTER_AUTH_URL` | yes | The public base URL, e.g. `https://greenroom.example.com` (used for cookies + the SSO callback). **It gates trusted origins, so it must match the URL you actually browse.** Defaults to `http://localhost:4321` — so a local platform run on any other port fails sign-in/sign-up with an opaque `Invalid origin` until you set this to match (e.g. `PORT=4899 BETTER_AUTH_URL=http://localhost:4899`). |
 | `SECRET_KEY` | yes | AES key material for encrypting stored **test-target** credentials (`credential.secretEnc`). Losing it just means those creds need re-entering — not catastrophic, but set a real managed secret. |
 | `SUPERADMIN_EMAIL` | recommended | The email that becomes superadmin on first login. Otherwise the first-ever user is promoted. |
 | `COMPANY_NAME` | — | Name of the default organization (cosmetic; default `"Company"`). |
@@ -137,17 +138,22 @@ GITHUB_TOKEN=<pat> bun install --production   # skips devDependencies
 bun run postinstall                            # installs the Playwright browser
 ```
 
-`--production` is what unblocks it: **`@tjakoen/pantry` is the only remaining GitHub *git*-dep**
-(a nested graph Bun can't resolve from zero), and it is a **devDependency** — the component-catalog
-cockpit (`bunx pantry`), never imported at runtime. A production install omits it entirely.
+**Use Bun, not npm** — this is the one hard rule, re-verified 2026-07-30 on a fresh clone with a
+cold cache:
 
-**Dev install (with the cockpit) still hits the nested-git wall** — a full `bun install` pulls
-`pantry`, which fails to resolve from scratch — so local development still runs from an existing
-vendored `node_modules`. Flattening/publishing `pantry` removes that last wrinkle
-(tracked in [plans/platform.md](plans/platform.md) §10). For deploy, prefer the `--production`
-path above, or ship the app **with a working `node_modules`** as the artifact.
+- **A full `bun install` now works from scratch**, `pantry` included (85 packages, then the app
+  boots). The older note here — that a dev install hits a "nested-git wall" and you must ship a
+  vendored `node_modules` — no longer matches reality; `--production` is a way to install *less*,
+  not a workaround you need.
+- **`npm install` fails outright, and always will until `pantry` is re-pinned.** `@tjakoen/pantry`
+  (a devDependency) pins `tjakoen.github.io#afc640a`, a commit no longer on that remote. npm
+  resolves the whole graph and runs `git checkout afc640a`, which aborts the install — even with
+  `--omit=dev`, so the runtime deps never land. Bun fetches that commit as a codeload tarball and
+  succeeds. Note what this means: bun works only because GitHub still serves an *unreferenced*
+  commit. Re-pin the dep in the **`pantry` repo** (`bun run deps:refresh` there → commit → re-pin
+  here) to stop depending on that.
 
-> Two additional caveats for a from-scratch deploy install: (1) published `@tjakoen/grain@^0.1.8`
-> may not yet carry the P4 editor's `organisms/code-editor` chrome (currently vendored) — if the
-> `/editor` page renders unstyled, that component still needs publishing. (2) `monaco-editor`'s
-> `min/vs` assets are served from `node_modules/monaco-editor` — ensure they're present post-install.
+> Caveat for a from-scratch install: `monaco-editor`'s `min/vs` assets are served from
+> `node_modules/monaco-editor` — ensure they're present post-install. (The earlier caveat about
+> published `grain` lacking the editor's `organisms/code-editor` chrome is resolved: the pinned
+> `@tjakoen/grain@0.1.12` carries it, so nothing is vendored any more.)

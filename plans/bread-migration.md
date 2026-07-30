@@ -1,6 +1,19 @@
+---
+id: bread-migration
+status: done
+track: migration
+depends: []
+touches: [server.ts, lib/, pages/, plans/]
+owner: ai
+---
+
 # PLAN — Greenroom → BREAD stack migration (2026-07-09)
 
-> This is the **active** plan: greenroom's migration to a full BREAD consumer. The original
+> **Shipped and closed.** The migration completed at the P6 cutover: the old `interface/` SPA is
+> deleted and every page is a real GRAIN route. Kept in full as the design record — this is the
+> reasoning behind the architecture, not a list of pending work. Live phase plans are `p0`–`p6`.
+
+> This was the **active** plan: greenroom's migration to a full BREAD consumer. The original
 > build plan (Tracks 1–5, complete) is archived verbatim at the bottom of this file under
 > [Archive — original build plan](#archive--original-build-plan-complete). Companion doc for
 > the new grain components this migration needs lives outside the repo (handed to a grain

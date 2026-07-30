@@ -1,7 +1,7 @@
 // greenroom/server.ts — the BREAD composition root: the ONE place BATCH + GRAIN + MILL + PROOF
 // and greenroom's own domain meet, mirroring tjakoen.github.io/server.ts.
 //
-// STATUS: P6 cutover complete (PLAN.md §4) — the whole BREAD → GRAIN migration is done. Every
+// STATUS: P6 cutover complete (plans/bread-migration.md §4) — the whole BREAD → GRAIN migration is done. Every
 // human route is a real GRAIN page (grainPage below): /run (also served at "/"), /tests,
 // /editor, /history, /bug, /settings, /environments, /accounts, /admin, plus PROOF /plans and
 // MILL /guide,/context. The old interface/ SPA (Node http server + hand-rolled app.js/index.html/

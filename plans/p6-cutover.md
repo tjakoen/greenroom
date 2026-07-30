@@ -10,7 +10,7 @@ owner: ai
 # P6 — cutover
 
 `/` becomes the new Run page; delete the old interface/ SPA + server.js; run the full §5
-must-not-regress checklist from PLAN.md; sync docs.
+must-not-regress checklist from plans/bread-migration.md; sync docs.
 
 ## Tasks
 

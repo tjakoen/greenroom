@@ -1,6 +1,6 @@
 ---
 id: p2-grain-shell
-status: todo
+status: done
 track: migration
 depends: [p1-composition-root]
 touches: [pages/, components/, server.ts]

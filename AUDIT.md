@@ -105,14 +105,57 @@ The sync table in [CLAUDE.md](CLAUDE.md) is the contract. Spot-check the high-dr
 matches `playwright.config.ts` + `tests/helpers/fixtures.ts`.
 
 ```bash
-# no leftover company/app-specific brand strings in committed files — expect zero
-grep -rinE "career ?team|careeredge|spark-uat|edge tests" \
-  --include='*.md' --include='*.ts' --include='*.js' --include='*.json' --include='*.html' --include='*.css' \
-  --exclude-dir=node_modules --exclude-dir=runs --exclude-dir=.claude . \
-  | grep -vE "config/urls\.json|AUDIT\.md"
+# no leftover company/app-specific brand strings in TRACKED files — expect zero.
+# Scans `git ls-files` rather than an --include extension list, because an
+# extension filter silently skips extensionless tracked files: a stale employer
+# name sat in LICENSE:3 while this check reported green (audit 2026-07-30).
+git grep -inE "career ?team|careeredge|spark-uat|edge tests" -- \
+  ':!AUDIT.md' ':!runs' ':!.claude'
 ```
 
 Pass: no mismatch found (or each fixed in the same session), and zero brand-string hits.
+Scan **tracked files, not the working tree** — `git grep` is the gate, because only
+tracked content goes public.
+
+## 8. Public-repo gates
+
+Only relevant when this repo is (or is about to be) public. §1–§7 all scan the *current*
+tree; publishing exposes **history** too, and history is the one thing a later fix cannot
+reach. Added after the 2026-07-30 public-readiness audit, which found a real address in a
+deleted screenshot that no text scan could ever have flagged.
+
+```bash
+# 8a. Files that exist in history but not in the tree — each one still ships. Expect only
+#     deliberate deletions (superseded docs, spikes); investigate anything with data in it.
+comm -23 <(git log --all --pretty=format: --name-only | sort -u | grep -v '^$') \
+         <(git ls-files | sort)
+# 8b. Images anywhere in history are opaque to every grep above. Expect zero UI captures of
+#     a real deployment (account lists, admin pages, anything with an address on screen).
+git log --all --pretty=format: --name-only | grep -iE '\.(png|jpg|jpeg|webp|gif)$' | sort -u
+# 8c. Can a stranger install? Check the registry the scope is ACTUALLY mapped to (.npmrc),
+#     not just npmjs. Today: 404 on npmjs + 401 on GitHub Packages = token required, so a
+#     stranger CANNOT install (verified 2026-07-30). Both must read 200 to call this green.
+curl -s -o /dev/null -w "npmjs:  %{http_code}\n" https://registry.npmjs.org/@tjakoen%2fgrain
+curl -s -o /dev/null -w "ghpkg:  %{http_code}\n" https://npm.pkg.github.com/@tjakoen%2fgrain
+# 8d. No auth token in the committed npm config — expect zero. (The scope->registry MAPPING
+#     line must stay: deleting .npmrc sends @tjakoen to npmjs, which only appears to work on
+#     a machine whose own ~/.npmrc still maps it.)
+grep -nE "_authToken" .npmrc 2>/dev/null; echo "exit=$? (1 = clean)"
+# 8e. `npm install` must work, or say so loudly. It currently FAILS on a dead git pin in
+#     @tjakoen/pantry — expect a "git reference could not be found" error until pantry is
+#     re-pinned. Bun is the only working installer.
+grep -n "afc640a" bun.lock 2>/dev/null && echo "STILL PINNED to the dead commit" || echo "clean"
+```
+
+Pass: every history-only path is a known, data-free deletion; no image in history shows a
+real deployment's data; the dependency scope resolves **anonymously** (a `401`/`404` means
+only token-holders can install — state that plainly in [README](README.md) rather than
+implying a clone Just Works); `.npmrc` carries the scope mapping but no token; `npm install`
+either works or is documented as broken with the reason.
+
+Note on 8a/8b: the only real remedy is a history rewrite (`git filter-repo --path … --invert-paths`),
+which is free while the repo is private and coordination-expensive after it is public. Run
+this section **before** the first publish, not after.
 
 ---
 

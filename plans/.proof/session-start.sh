@@ -1,6 +1,6 @@
 #!/bin/sh
 # plans/.proof/session-start.sh — prints a compact plan index for a SessionStart hook.
-# Cheap session-start context per PLAN.md: id + status + title, no bodies. POSIX sh, no
+# Cheap session-start context per plans/bread-migration.md: id + status + title, no bodies. POSIX sh, no
 # bashisms, so it runs on any host regardless of shell.
 
 set -e

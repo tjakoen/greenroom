@@ -1,6 +1,6 @@
 ---
 id: p4-run-page
-status: todo
+status: done
 track: migration
 depends: [p3-tests-page]
 touches: [pages/run, components/]

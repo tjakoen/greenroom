@@ -75,8 +75,8 @@ Requires **Bun** (<https://bun.sh>) — the app runs on `bun server.ts` — plus
 Playwright. `npm start`/`npm run demo` shell out to bun.
 
 ```bash
-npm install                    # deps + Chromium (postinstall); if `bun install` flakes on
-                               #   the private GRAIN github deps, `npm install` git-clones them
+bun install                    # deps + Chromium (postinstall). USE BUN, NOT NPM — see the
+                               #   install note below; `npm install` currently fails outright
 npm start                      # the app (bun server.ts): LOCAL edition — single-user, no accounts, flat-file config
 npm run start:platform         # PLATFORM edition — multi-user accounts + DB (GREENROOM_MODE=platform); ALLOWED_HOSTS also implies it
 npm run menu                   # terminal menu runner (prompts for the environment)
@@ -89,8 +89,20 @@ npm run check:legacy           # typecheck tests/ specs + root config files (pla
 ```
 
 Non-coders don't type these: the **🚀 Open Test App** VS Code task (`.vscode/tasks.json`)
-runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. First
-`npm install` runs on VS Code's prompt / the task's first run.
+runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. Both `dependsOn`
+the **📦 Install dependencies** task (`bun install`), so a fresh clone installs on the first
+task run instead of crashing on a missing module.
+
+> **Install is `bun install`, and it needs a token.** Two hard constraints, both verified:
+> 1. **`npm install` fails** — `@tjakoen/pantry` (devDependency) pins `tjakoen.github.io#afc640a`,
+>    a commit no longer on that remote. npm resolves the full graph and runs `git checkout afc640a`,
+>    which aborts the whole install (even with `--omit=dev`), so the runtime deps never land. Bun
+>    resolves it from the codeload tarball and succeeds. **Fixing this properly means re-pinning the
+>    dep in the `pantry` repo** (`bun run deps:refresh` there → commit → re-pin here).
+> 2. **`@tjakoen/{batch,grain,mill,proof}` are private GitHub Packages** (`.npmrc` →
+>    `npm.pkg.github.com`). Without a `read:packages` token in `~/.npmrc`, install dies with
+>    `401 … failed to resolve`. Anyone cloning needs that token — or hand them a **deployed
+>    instance URL** instead ([DEPLOY.md](DEPLOY.md)) so they install nothing.
 
 ## Non-negotiables
 
@@ -119,7 +131,7 @@ runs `npm start` and opens the browser; **🎬 Open Demo** runs `npm run demo`. 
 
 ## Keep it aligned — when you change X, update Y
 
-> **Migration note (BREAD → GRAIN, complete — PLAN.md §4, P6 cutover).** The entry point is
+> **Migration note (BREAD → GRAIN, complete — plans/bread-migration.md §4, P6 cutover).** The entry point is
 > **`server.ts`**, the BATCH·GRAIN·MILL·PROOF composition root (`start` = `bun server.ts`). The
 > whole domain lives in **`lib/*.ts`**. Every human route is a real GRAIN page, rendered via
 > `grainPage` in `server.ts`: **`/`** and **`/run`** (`pages/run-page.ts` + `pages/run.js`, the

@@ -2,21 +2,26 @@
 
 [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/ten-times-zero)
 ![Playwright](https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white)
-![Node](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
 ![Bun](https://img.shields.io/badge/Bun-000000?logo=bun&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-A small **local app** to run automated browser checks against your web app and review the
-results. **No coding required.** Runs entirely on your computer, from VS Code or the terminal.
+Run automated browser checks against your web app and review the results — **no coding
+required**. Greenroom wraps [Playwright](https://playwright.dev) in a dashboard: pick one or
+several environments, click **Run**, watch a live pass/fail checklist, and hand developers a
+one-click **bug bundle** (trace + video + screenshots + logs).
 
-Greenroom wraps [Playwright](https://playwright.dev) in a friendly dashboard: pick one (or
-several) environments, click **Run**, watch a live pass/fail checklist, and hand developers a
-one-click **bug bundle** (trace + video + screenshots + logs). Point it at any website —
-you tell it the URLs and how to log in.
+It never needs your app's source — you tell it the URLs and how to log in.
 
-**Want to look before you set anything up?** Run `npm run demo` (or the VS Code task
-**🎬 Open Demo**) — it boots read-only with example data already filled in, so you can click
-around a populated dashboard with zero config. See [Try the demo](#try-the-demo) below.
+**Look before setting anything up:** `npm run demo` (or the VS Code task **🎬 Open Demo**) boots
+read-only against seeded example data — a populated dashboard with red and green results, zero
+config. A **Demo** badge appears and every write is disabled.
+
+Greenroom runs two ways from one codebase:
+
+| | Who for | How you reach it |
+|---|---|---|
+| **Local** (default) | one person, own machine | open the folder in VS Code, run a task |
+| **Platform** | a team, many at once | a URL — accounts, teams, a run queue → **[DEPLOY.md](DEPLOY.md)** |
 
 ---
 
@@ -28,188 +33,139 @@ around a populated dashboard with zero config. See [Try the demo](#try-the-demo)
    runs on Bun; this is one-time.
 3. Install **VS Code** from <https://code.visualstudio.com> and open this folder in it
    (**File → Open Folder**). It'll offer to install the **Playwright** extension — say yes.
-4. Start the app without typing anything: **Terminal → Run Task → 🚀 Open Test App**. First
-   run installs everything (a few minutes), then the app opens in your browser at
-   <http://localhost:4321>.
-5. Add your **environments**: go to **Settings → Environments** and add each site you want to
-   test (a name like `staging` and its URL). One is marked the default.
-6. Add your **roles & logins**: go to **Settings → Roles & logins**, create a role (e.g.
-   `admin`), tick which sites it applies to, and type a username + password for each. Click
-   **Save**. Passwords are written to a private `.env` file on your machine — never shown
-   again, never shared or committed. (No file editing.) The role *definitions* (names +
-   which sites) are saved in `config/roles.json`; the *credentials* live only in `.env`.
+4. **Add your access token** (one-time, and only if you cloned this repo yourself). Some of
+   Greenroom's building blocks are published privately, so installing needs a GitHub token
+   with `read:packages`. Create one at <https://github.com/settings/tokens>, then add these two
+   lines to the file `.npmrc` in your home folder (create it if it isn't there), replacing
+   `<your-token>`:
 
-After that, just run the **🚀 Open Test App** task any time to open the app.
+   ```
+   @tjakoen:registry=https://npm.pkg.github.com
+   //npm.pkg.github.com/:_authToken=<your-token>
+   ```
 
-A ready-made `example` role (using saucedemo's public demo login) ships pre-configured, so
-the built-in example tests run without any setup.
+   Without it, step 5 stops with `401 … failed to resolve`. **If someone sent you a link to a
+   running Greenroom instead, skip all of this** — just open the link and sign in; there is
+   nothing to install.
+5. Start the app without typing anything: **Terminal → Run Task → 🚀 Open Test App**. The
+   first run installs everything (a few minutes — it runs `bun install` for you), then the app
+   opens in your browser at <http://localhost:4321>.
+6. Add your **environments** — **Settings → Environments**: a name like `staging` and its URL;
+   one is the default. The same panel's **Login form** section is where you describe your app's
+   sign-in page (per site, or one shared form). That's data, not code.
+7. Add your **roles & logins** — **Settings → Roles & logins**: create a role (e.g. `admin`),
+   tick which sites it applies to, type a username + password for each, **Save**.
 
-## Using the app
+A **role** is a named account your tests sign in as. Role *definitions* (names + which sites)
+live in `config/roles.json`; the *credentials* go only into a private, git-ignored `.env` —
+never shown again, never committed, never sent anywhere. Deleting a role leaves its saved
+passwords untouched. A ready-made `example` role ships wired to saucedemo's public demo login,
+so the four shipped `@example` tests — including one that **fails on purpose**, so you can see
+what red looks like — run with no setup at all.
 
-The app has a left sidebar with these pages:
+After that, just run **🚀 Open Test App** any time. Other tasks: **▶ Run tests**, **⏺ Record a
+new test**, **📊 View last report** — or use VS Code's **Testing** panel for a ▶ beside every
+test.
 
-- **🏠 Run tests** — pick **one or several** environments (the environment pills are
-  multi-select), click **Run**, and watch a live pass/fail checklist (✓ / ✕ / ◐). Raw log is
-  under *Technical details*. **Open full report** for screenshots, video and a step-by-step
-  trace. When you pick more than one environment, results show as a **test × environment
-  matrix** with per-environment health. A *Getting started* checklist guides you the first time.
-- **🧪 Tests** — every individual check, grouped by feature. Run one (hover → **▶ Run**),
-  tick several and **Run selected**, or **Run by tag**. Filter by `@tag`, or by smart
-  filters (**Failing / Never run / Flaky / Slowest**). Click 🏷 on a test to set its
-  **group, priority (P1/P2/P3), owner and notes**. Rename/delete too. A test recorded with a
-  login shows a **runs as: <role>** badge. Click **⌗** on a test to make its form inputs
-  **dynamic** (see below). **Record a new test**: type a name, optionally pick a role in
-  **Log in as**, click record, click through the site, close the browser — your clicks
-  become a test.
-- **📜 History** — every past run, saved on your computer; filter and open any.
-- **🐞 Report a bug** — pick a run + test, then **Download bug bundle (.zip)** (trace,
-  video, screenshots, logs, and a plain-language `summary.md` — everything a developer
-  needs), or **Copy summary** to paste into an issue tracker/Slack/email. Also exports a
-  single-snapshot **PDF** (pick a page, or scrub the video and *Use this frame*).
-- **📖 User guide** — the manual, in the app.
-- **⚙️ Settings** — roles & logins, environments, light/dark theme.
+## The pages
 
-The `trace.zip` in a bug bundle is the key artifact for devs — they open it at
-<https://trace.playwright.dev> to replay the whole session (steps, screenshots, console,
-network).
+- **Run** — pick one or several environments, click **Run**, watch a live checklist
+  (✓ ✕ ◐ ○). Several environments render as a **test × environment matrix** with per-env
+  health. **Open full report** for screenshots, video and a step-by-step trace.
+- **Tests** — every check, grouped. Run one, tick several and **Run selected**, or **Run by
+  tag**. Filter by `@tag` or smart filter (**Failing / Never run / Flaky / Slowest**). 🏷 sets
+  group, priority, owner and notes. **Record a new test**: name it, optionally pick a role
+  under **Log in as**, click through the site, close the browser — your clicks are the test.
+- **Editor** — edit a spec in the browser, validated before it saves (with version history on
+  the platform edition).
+- **History** — every past run; filter and reopen any.
+- **Report a bug** — pick a run + test, then **Download bug bundle (.zip)**: trace, video,
+  screenshots, logs and a plain-language `summary.md`. Or **Copy summary** for an issue
+  tracker, or export a single-snapshot **PDF**.
+- **User guide** — the manual, in the app ([USER-GUIDE.md](USER-GUIDE.md)).
+- **Settings** (local only) · **Environments · Accounts · Admin** (platform only).
 
-### Roles & logins
+The `trace.zip` is what developers actually want — they drop it on
+<https://trace.playwright.dev> and replay the whole session.
 
-A **role** is a named account (e.g. `admin`, `editor`) that tests can log in as. In
-**Settings → Roles & logins** you:
+### Recording signs itself in
 
-1. **Create a role** and give it a friendly label.
-2. **Tick which sites (environments)** it applies to — or mark it *shared* so one login
-   works everywhere.
-3. **Fill in a username + password per site.** Click **Save**.
+Pick a role under **Log in as**: Greenroom logs you in before the recorder opens, then writes
+`await login('<role>')` into the spec. At run time that resolves the right per-environment
+account — **no credentials ever land in a test file**.
 
-The role *definitions* (names + which sites) are stored in `config/roles.json`. The
-*credentials* live only in your private `.env` and are **never shown again, never committed,
-never sent anywhere**. Deleting a role removes its definition but **never touches `.env`** —
-your saved passwords stay put. Where a site has its own account, that per-environment login
-is used; otherwise the shared login is the fallback.
+### Dynamic form inputs
 
-### Record a test that logs itself in
-
-When recording, pick a role under **Log in as**. Greenroom logs you in first (so you skip
-the login screen while clicking around) and writes `await login('<role>')` into the recorded
-test. At run time that logs in with the right per-environment account — **no credentials ever
-land in the test file**. The Tests page shows a **runs as: <role>** badge on such tests.
-
-### Make form inputs dynamic
-
-Recorded tests capture the exact text you typed (e.g. an email). Re-running them can fail
-with "email already exists". Click **⌗** on a test to see every recorded input value, then
-pick a generator — **unique email**, **random name**, **random phone**, and more — and
-Greenroom rewrites that field so each run submits fresh data. It's backed by
-[tests/helpers/data.ts](tests/helpers/data.ts) (no new dependencies).
-
-### Try the demo
-
-Want to explore before setting anything up? Run **`npm run demo`** (or the VS Code task
-**🎬 Open Demo**). Greenroom boots **read-only** with seeded example data from the committed
-`demo/` folder — a populated dashboard, a run with both red and green results, and example
-roles — so you can click through everything with zero config. A **Demo** badge shows in the
-sidebar and all writes are disabled (nothing you click changes your real setup).
-
-### The built-in example tests
-
-Four `@example` tests ship with Greenroom and run **zero-config** against public sites, so a
-fresh clone works out of the box:
-
-- **logs in as a standard user** — saucedemo login
-- **navigates the Playwright docs** — playwright.dev
-- **searches Wikipedia**
-- **fails on purpose to show a red run** — an intentional failure, so you can see what a
-  failure looks like
-
-Use them to learn the app, then delete them once your own tests exist.
-
-### More ways to run in VS Code
-
-Everything runs without typing commands:
-
-- **Terminal → Run Task**, then pick **🚀 Open Test App**, **▶ Run tests (pick
-  environment)**, **⏺ Record a new test**, or **📊 View last report**.
-- Or use the **Testing** panel (flask icon, left sidebar): every test with a ▶ play button,
-  results shown inline.
-
-Browsing your saved tests and results is point-and-click in the file explorer.
-
-### Power-user commands (optional)
-
-```bash
-npm start                       # the app (http://localhost:4321)
-npm run demo                    # read-only demo with seeded example data (zero config)
-npm run menu                    # run from the terminal (prompts for the environment)
-TEST_ENV=staging npx playwright test        # run all tests against one environment
-TEST_ENVS=staging,production npx playwright test   # run against several environments at once
-npm run record                  # record a test from the terminal
-npm run report                  # reopen the last report
-CAPTURE=light TEST_ENV=staging npx playwright test   # faster: artifacts only on failure
-```
-
-`TEST_ENV` picks which single environment to run against. Leave it unset and the one marked
-`"default": true` in `config/urls.json` is used. `TEST_ENVS` (comma-separated) runs the same
-tests against each environment in turn (one Playwright project per environment) — this is
-what the multi-select on the Run page uses.
+A recorded test replays the exact text you typed, so re-runs hit "email already exists". Click
+**⌗**, pick a generator — unique email, random name, phone — and Greenroom rewrites that field.
+Backed by [tests/helpers/data.ts](tests/helpers/data.ts).
 
 ## What gets captured
 
-Every run records **everything by default**. Open the report, click a test, then click the
-**trace** to get the full picture:
+Everything, by default: a **screenshot filmstrip**, the full **video**, every Playwright
+**step**, and the browser's **console** and **network** logs (plus `console.log` /
+`network.log` attachments for errors and 4xx/5xx). Open a test in the report and click the
+trace to see it all at once.
 
-- **Right pane** — every step Playwright took.
-- **Top (filmstrip)** — a **screenshot per step**.
-- **Bottom tabs** — the browser's **Console** and **Network**.
-- **Video** — the whole test, start to finish.
-- Plus `console.log` / `network.log` attachments (errors and 4xx/5xx) on each test.
+In a hurry? Tick **faster run (less detail)**, or set `CAPTURE=light` — heavy artifacts are
+then kept only for failures.
 
-Want faster runs? Tick **faster run (less detail)** in the app, or use `CAPTURE=light` —
-that keeps the heavy artifacts only when a test fails.
+## Writing a test by hand
 
----
+**Record a new test** is the easy path. Otherwise add a `*.spec.ts` anywhere in `tests/`:
+
+1. Copy the shape of a shipped example — `tests/example-nav.spec.ts` (no login) or
+   `tests/example-login.spec.ts` (logs in) — or `tests/login.spec.ts`, the template for a
+   smoke login as one of your own roles.
+2. Navigate with **relative** paths: `page.goto('/some/path')` resolves against whichever
+   environment you picked, so one test works everywhere.
+3. Add `@tags` to the title — `test('checkout works @smoke', …)` — to filter and run by tag.
+
+Never type a password in a test. Use the `login` fixture (`await login('admin')`), which reads
+that role's per-environment account from your `.env`; recording with **Log in as** inserts the
+call for you. You only hand-edit [tests/helpers/auth.ts](tests/helpers/auth.ts) for exotic
+flows (multi-step, MFA, SSO) — ordinary login forms are configuration.
+
+Tests are **not** tied to an environment: they live flat in `tests/`, and the environment you
+pick supplies the base URL and the logins.
 
 ## Where things live
 
-| Folder | What it's for |
-|--------|---------------|
-| `server.ts` + `pages/` | The web page you run tests from |
-| `runs/` | Archived results of past runs (local only) |
-| `tests/` | Your tests (`*.spec.ts`). Every test runs against whichever environment you pick |
-| `tests/helpers/` | Reusable pieces (e.g. `login`) |
-| `config/urls.json` | The website URLs for each environment (single source; git-ignored, seeded from `urls.example.json`) |
-| `config/roles.json` | Your role definitions — names + which sites each applies to (git-ignored, seeded from `roles.example.json`). No passwords here |
-| `.env` | Your logins/passwords (private, git-ignored) |
-| `demo/` | Seeded example data for `npm run demo` (committed, read-only) |
-| `context/` | Notes about your app for whoever writes tests (a template to fill in) |
+| Path | What it's for |
+|---|---|
+| `server.ts` + `pages/` | The app you run tests from |
+| `lib/` | The domain — runner, recorder, bundles, PDF, scoping |
+| `tests/` · `tests/helpers/` | Your specs, and reusable pieces like `login` |
+| `config/urls.json` | Environment URLs + login forms (git-ignored, seeded from `urls.example.json`) |
+| `config/roles.json` | Role definitions — no passwords (git-ignored) |
+| `.env` | Your logins (private, git-ignored) |
+| `runs/` | Archived past runs (local only) |
+| `demo/` | Seeded data for `npm run demo` (committed, read-only) |
+| `context/` | A fill-in template describing the app under test |
+| `plans/` | The design record — how this was built, and why |
 
-## Writing a new test
+## Commands (optional)
 
-Easiest is **Record a new test** in the app (above). To write one by hand:
+```bash
+npm start                                          # the app (http://localhost:4321)
+npm run demo                                       # read-only, seeded, zero config
+npm run start:platform                             # multi-user edition (see DEPLOY.md)
+npm run menu                                       # run from the terminal
+npm run record                                     # record a test from the terminal
+npm run report                                     # reopen the last report
+TEST_ENV=staging npx playwright test               # one environment
+TEST_ENVS=staging,production npx playwright test   # several at once
+```
 
-1. Add a `*.spec.ts` file anywhere in `tests/`. Copy the shape of `tests/home.spec.ts` or
-   `tests/login.spec.ts`.
-2. Use relative paths — `page.goto('/some/path')` hits the active environment's base URL, so
-   the same test works against every environment.
-3. Add `@tags` to the test title (e.g. `test('checkout works @smoke', ...)`) to filter and
-   run by tag in the app.
+`TEST_ENV` picks a single environment; unset, the one marked `"default": true` in
+`config/urls.json` wins. `TEST_ENVS` runs the same tests against each environment in turn —
+that's what the Run page's multi-select does.
 
-Never type passwords directly in a test — use `login(page, 'roleName')` from
-[tests/helpers/auth.ts](tests/helpers/auth.ts), which reads the right per-environment account
-for that role from your private `.env`. (Recording with a **Log in as** role inserts this
-call for you.) **First edit `auth.ts` to match your app's login form** (URL + field
-selectors). To vary form data on each run, use the generators in
-[tests/helpers/data.ts](tests/helpers/data.ts) (or the **⌗** button in the app).
+## Docs
 
-## Adding another environment
-
-Use the **Environments** panel in the app: type a name (e.g. `staging`) and its URL, click
-**Add**. Then add the real logins for it in **Settings → Roles & logins** — tick the new site
-on any role that should run there and fill in its username + password.
-
-(You can also edit `config/urls.json` directly — see the change-map in [CLAUDE.md](CLAUDE.md).
-Mark one environment `"default": true`.)
+**[USER-GUIDE.md](USER-GUIDE.md)** the in-app manual · **[DEPLOY.md](DEPLOY.md)** running a real
+deployment · **[CLAUDE.md](CLAUDE.md)** how to work in this repo · **[AUDIT.md](AUDIT.md)** the
+alignment runbook · **[plans/](plans/)** the design record
 
 ## License
 

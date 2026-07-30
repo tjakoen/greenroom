@@ -8,7 +8,7 @@ import {
   createRun, getRun, getActiveRun, pushOutput, broadcast, broadcastGlobal, publicState, recordingState,
 } from "./run-stream.ts";
 import type { RunStatus } from "./run-stream.ts";
-import { validTestFile, ROOT, IS_DEMO, denyInDemo } from "./paths.ts";
+import { validTestFile, ROOT, IS_DEMO, IS_LOCAL, denyInDemo } from "./paths.ts";
 import { envNames } from "./envs.ts";
 import { archiveRun, LIVE_RUNS_DIR } from "./records.ts";
 import type { RunConfigBundle } from "./run-config.ts";
@@ -31,6 +31,12 @@ export interface StartRunOptions {
   runId?: string;
   runConfig?: RunConfigBundle;
   onDone?: (info: { status: RunStatus; artifactDir?: string }) => void;
+  // "Show the browser" (LOCAL only): run Playwright with a visible window instead of headless, so
+  // the user can watch the checks click through their app. Forced to one worker — headed runs open
+  // a real window per worker, and several racing windows is unwatchable (and steals focus N times).
+  // Refused on a deployed instance for the same reason recording is (Gate E, lib/recorder.ts): a
+  // server has no screen to open a browser on, so it would hang until the run timed out.
+  headed?: boolean;
 }
 
 // envs may be a single env name (today's behaviour, one project) or an array of
@@ -54,6 +60,12 @@ export function startRun(
   // screen (lib/recorder.ts), not something the queue's concurrency cap makes sense for.
   if (recordingState.recording || recordingState.proc) {
     return { ok: false, error: "A recording is in progress." };
+  }
+  // "Show the browser": LOCAL only (see StartRunOptions.headed). The queue never asks for it, so
+  // this is belt-and-suspenders against a future platform caller silently hanging a headless box.
+  const headed = !!opts?.headed;
+  if (headed && !IS_LOCAL) {
+    return { ok: false, error: "Showing the browser only works on your own machine, not on a deployed Greenroom." };
   }
   const list = (Array.isArray(envs) ? envs : [envs]).map((e) => String(e || "").trim()).filter(Boolean);
   const unique = [...new Set(list)];
@@ -142,7 +154,9 @@ export function startRun(
   // keys to the whole platform. Local sets neither (no DB/auth), so this is a no-op there; test-
   // target creds still reach the child via credEnv (platform) or the .env-loaded pairs (local).
   for (const k of ["SECRET_KEY", "BETTER_AUTH_SECRET"]) delete childEnv[k];
-  const proc = spawn("npx", ["playwright", "test", ...targets, ...grepArgs], {
+  // --workers=1 rides along with --headed on purpose: see StartRunOptions.headed.
+  const headedArgs = headed ? ["--headed", "--workers=1"] : [];
+  const proc = spawn("npx", ["playwright", "test", ...targets, ...grepArgs, ...headedArgs], {
     cwd: ROOT,
     detached: process.platform !== "win32",
     env: childEnv,

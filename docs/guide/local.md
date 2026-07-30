@@ -48,4 +48,5 @@ against public sites, so you have something to click before you add your own sit
 - [Writing and recording checks](/guide/writing-checks): make Greenroom test the exact things
   you care about, without writing code.
 - [Reporting a bug](/guide/reporting-bugs): turn a failed run into one file a developer can open.
-- [Safety, speed, and FAQ](/guide/faq): where data lives, how to run faster, the demo.
+- [Safety, speed, and FAQ](/guide/faq): where data lives, how to run faster, how to watch a
+  run happen on screen, the demo.

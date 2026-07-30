@@ -173,20 +173,20 @@ bun run postinstall  # installs the Playwright browser
 Verified 2026-07-30 against an empty `HOME` (no user `~/.npmrc`) and a purged package cache:
 82 packages installed, both typechecks green, 44/44 tests, every page 200.
 
-**Use Bun, not npm** — this is the one hard rule, re-verified 2026-07-30 on a fresh clone with a
-cold cache:
+**Prefer Bun** — it is what the VS Code tasks and `npm start` shell out to. Re-verified
+2026-07-31 against an empty `HOME`:
 
-- **A full `bun install` now works from scratch**, `pantry` included (85 packages, then the app
+- **A full `bun install` works from scratch** with no credentials (82 packages, then the app
   boots). The older note here — that a dev install hits a "nested-git wall" and you must ship a
   vendored `node_modules` — no longer matches reality; `--production` is a way to install *less*,
   not a workaround you need.
-- **`npm install` fails outright, and always will until `pantry` is re-pinned.** `@tjakoen/pantry`
-  (a devDependency) pins `tjakoen.github.io#afc640a`, a commit no longer on that remote. npm
-  resolves the whole graph and runs `git checkout afc640a`, which aborts the install — even with
-  `--omit=dev`, so the runtime deps never land. Bun fetches that commit as a codeload tarball and
-  succeeds. Note what this means: bun works only because GitHub still serves an *unreferenced*
-  commit. Re-pin the dep in the **`pantry` repo** (`bun run deps:refresh` there → commit → re-pin
-  here) to stop depending on that.
+- **`npm install` now resolves too** (83 packages, no credentials). The `@tjakoen/pantry`
+  devDependency that pinned `tjakoen.github.io#afc640a` — a commit no longer on that remote, which
+  aborted npm's install even with `--omit=dev` — was **removed** from this repo, so that failure
+  mode is gone. Bun remains the supported path because it is what the tasks invoke, not because
+  npm is broken.
+- **No `.npmrc`, no token.** `@tjakoen/{batch,grain,mill,proof,crumb}` are all on the public npm
+  registry, so the scope resolves to npmjs by default.
 
 > Caveat for a from-scratch install: `monaco-editor`'s `min/vs` assets are served from
 > `node_modules/monaco-editor` — ensure they're present post-install. (The earlier caveat about

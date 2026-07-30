@@ -10,6 +10,18 @@
 // site-group one-click presets, the Tests-scope and Run-as pickers, Run/Stop + a monochrome status
 // readout, and the live dashboard (4 stat tiles, a b-meter health bar, a single-env status-list or
 // a multi-env test×env matrix table, and the raw output in a <details>).
+import { IS_LOCAL } from "../lib/paths.ts";
+
+// "Show the browser" is LOCAL-only: it opens a real Chromium window on the user's own screen, which
+// a deployed (headless) instance has nowhere to put — same reason recording is local-only. Rendered
+// out of the markup entirely in platform rather than disabled, so there's no dead control to explain.
+// pages/run.js reads it defensively (missing element → plain headless run), so the two stay in step.
+const HEADED_CHECK = IS_LOCAL
+  ? `<label class="gr-check-inline">
+        <input type="checkbox" id="headed"> Show the browser <span class="cat-intro">(watch it run, slower)</span>
+      </label>`
+  : "";
+
 export function runBody(): string {
   return `<div class="run-page">
   <header class="board" style="margin-bottom:0">
@@ -37,6 +49,7 @@ export function runBody(): string {
       <label class="gr-check-inline">
         <input type="checkbox" id="light"> Faster run <span class="cat-intro">(less detail)</span>
       </label>
+      ${HEADED_CHECK}
     </div>
 
     <div class="gr-form-row" style="margin-top:var(--space-5)">

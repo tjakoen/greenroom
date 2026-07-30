@@ -271,11 +271,15 @@
     const prod = envs.filter((e) => /prod|production|live/i.test(e));
     if (prod.length && !confirm(`Run against ${prod.join(', ')}? That looks like a production environment.`)) return;
     $('output').textContent = '';
+    // "Show the browser" only exists in the LOCAL edition (pages/run-page.ts renders the checkbox
+    // out entirely in platform) — a missing element just means a normal headless run.
+    const headedEl = $('headed');
+    const headed = !!(headedEl && headedEl.checked);
     await seedChecklist(seed || null);
     const res = await api('/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ envs, light: $('light').checked, files: files || undefined, grep: grep || undefined, role: runRole || undefined }),
+      body: JSON.stringify({ envs, light: $('light').checked, headed, files: files || undefined, grep: grep || undefined, role: runRole || undefined }),
     });
     if (!res.ok) return toast(res.error);
     // Gate D: /api/run now QUEUES the run — it may not start immediately if other runs (this

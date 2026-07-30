@@ -76,8 +76,9 @@ Requires **Bun** (<https://bun.sh>) — the app runs on `bun server.ts` — plus
 Playwright. `npm start`/`npm run demo` shell out to bun.
 
 ```bash
-bun install                    # deps + Chromium (postinstall). USE BUN, NOT NPM — see the
-                               #   install note below; `npm install` currently fails outright
+bun install                    # deps + Chromium (postinstall). THE supported installer — see the
+                               #   install note below (`npm install` also resolves now, since the
+                               #   dead git pin is gone, but bun is what the VS Code tasks run)
 npm start                      # the app (bun server.ts): LOCAL edition — single-user, no accounts, flat-file config
 npm run start:platform         # PLATFORM edition — multi-user accounts + DB (GREENROOM_MODE=platform); ALLOWED_HOSTS also implies it
 npm run menu                   # terminal menu runner (prompts for the environment)
@@ -107,10 +108,13 @@ task run instead of crashing on a missing module.
 >    caused the nested git-dep wall (hence no committed lockfile), the `npm install` failure (a
 >    dead `tjakoen.github.io#afc640a` pin), and a `mill ^0.1.2` requirement that blocked the
 >    tokenless install. Run the catalog cockpit from its own checkout; `pantry.config.json` stays.
-> 4. **`@tjakoen/crumb` (guided tours) is intentionally not a dependency** — `server.ts` imports it
->    via a variable specifier in `try/catch` and degrades to tours-disabled. Add it locally with
->    `bun add @tjakoen/crumb` if you want tours. It is not yet published to npmjs.
-> 5. Prefer `bun install`; `bun.lock` stays git-ignored.
+> 4. **`@tjakoen/crumb` (guided tours) IS now a dependency** (`0.1.4`, published to npmjs
+>    2026-07-30 — this reverses the old "intentionally not a dependency / not yet published"
+>    rule). `server.ts` still imports it via a variable specifier in `try/catch`, so the app
+>    degrades to tours-disabled if it's ever absent; keep that guard.
+> 5. Prefer `bun install`; `bun.lock` stays git-ignored. **`npm install` now resolves too** (83
+>    packages against an empty `HOME`, verified 2026-07-31) — the `pantry` git pin that used to
+>    abort it is gone. Neither installer needs credentials.
 
 ## Non-negotiables
 
@@ -179,6 +183,7 @@ task run instead of crashing on a missing module.
 | **Video clip export** (short clip for a bug report) | `lib/ffmpeg.ts` (locates ffmpeg: system install → Playwright's bundled copy; no new dependency) ↔ `/api/ffmpeg-available` + the clip endpoint in `server.ts` ↔ `pages/bug.js` `ffmpegAvailable` + Download-clip buttons (hidden with a note when no ffmpeg) |
 | **The Tests library / per-test results** | `lib/tests-lib.ts` `listTests`/`specFiles`/`readResults`/`testHistory` (`specFiles` recursively walks `tests/` skipping `helpers/`; parses `test('…')` titles + @tags + the JSON reporter's `test-results/results.json`, aggregated across `runs/` for flaky/never-run/slowest) ↔ `pages/tests.js` (the Tests page). If you change the reporter set in `playwright.config.ts`, keep `results.json` |
 | **Test tags / metadata / filters** | `@tags` live in the test title (parsed by `parseTests`, matched by `--grep` on run) — editable in-app via the 🏷 panel's **Tags** field: `saveTags`/`/api/test-tags` rewrites the `@tags` in the title inside the spec file and migrates the sidecar meta key (`file::title`) to the new title (returns it so the client re-keys the follow-up `/api/test-meta` save). Group/priority/owner/notes live in `tests/tests-meta.json` (git-ignored, `loadMeta`/`saveMeta`, `/api/test-meta`). Smart filters (failing/flaky/never-run/slowest) are computed client-side in `pages/tests.js` (the Tests page). Run-by-tag/one/selected all go through `startRun(env,light,files,grep)` (env only picks the baseURL/logins; `files` empty → all of `tests/`). The real **Run page** (`pages/run.js`) has a **Tests** scope dropdown (`#runScope`, `populateRunScope`/`resolveRunScope`): "All tests" → unscoped; a **group** → its specs + a title-grep (groups are sidecar metadata, not greppable, so resolved like Run-selected); a **@tag** → a plain `--grep`. Refreshed on init/reload/run-done |
+| **"Show the browser"** (headed runs — watch the checks click through the app) | `lib/runner.ts` `StartRunOptions.headed` (spawns `--headed --workers=1` — one worker is load-bearing: a headed run opens a real window *per worker*; **refuses when `!IS_LOCAL`**, same reason recording does — a deployed box has no screen) ↔ `server.ts` `/api/run` (reads `headed` from the body, passes it **only** on the `IS_LOCAL` branch; never forwarded to `enqueueRun`) ↔ `pages/run-page.ts` `HEADED_CHECK` (the `#headed` checkbox is rendered **out entirely** in platform, not disabled) ↔ `pages/run.js` `startRun` (reads `#headed` defensively — missing element → normal headless run). Keep those two ends in step: the client's defensive read is what lets the server-side gate stay the single source of truth |
 | **Run-page dashboard** (stat tiles + health bar + live checklist) | The Run page is **`pages/run.js`** `renderChecklist` (parses Playwright `list` output live via `parseLine`; reconciles from `/api/results` on `done`) ↔ `pages/run-page.ts` skeleton (`#statTiles`,`#healthBar`,`#checklist`,`#runStatus`) ↔ the grain **stat-tile**/**b-meter**/**status-list** components + `pages/greenroom.css` `/run` layout. Monochrome: the `statusMark` glyphs ✓✕◐○ carry the pass/fail signal, a running row wears `data-commit="pending"`, multi-env renders a `.table` matrix |
 | **Report-a-bug moment picker** (screenshot scrubber) | It's a **screenshot** scrubber, not a video one: `pages/bug.js` `showSnap`/`loadPdfSnaps` step through the snapshots the test captured (`#snapRange`/`#snapPrev`/`#snapNext`, 2-col `.scrub-layout` = image \| logs). The webm is a secondary reference in a `<details>` (`#pdfVideoDetails`, native `<video controls>`; `primeVideo` resolves Playwright's `duration=Infinity` so it's seekable — `serveRanged` gives `/api/video` HTTP Range/206). Snapshots carry a `t` (ms from start, written by `fixtures.ts`); Download PDF sends `i` = snapshot index + `time` = its `t`. Keep `.scrubber` markup in `pages/report-bug-page.ts` + `pages/greenroom.css` in step |
 | **Logs at a captured moment** | `pages/bug.js` `renderMomentLogs` shows console + **actual network requests** (`requests`: method/status/url, non-2xx in red, capped `NET_MAX`) for the current screenshot: if the run has timing, filtered to ±`winMs()` of the snapshot's `t`; **fallback** — runs without timing show everything with a "re-run to pinpoint" note (never blank). Fed by `/api/moment?run&test` (`server.ts`, returns `consoleTimed`/`networkTimed`/`requests`/`console`/`network`/`durationMs`). The window is computed **client-side** as the interval from the previous screenshot's `t` to the current one's; **Download PDF** echoes that same interval to `/api/pdf` as `from`/`to` (ms), and `lib/pdf.ts` filters `consoleTimed`/`networkTimed`/`requests` to `[from, to]` — so preview and PDF match. Runs without per-line timing fall back to the full logs in both. |

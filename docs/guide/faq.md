@@ -1,6 +1,6 @@
 ---
 title: "Safety, speed, and FAQ"
-subtitle: "Where your data lives, how to run faster, and the demo."
+subtitle: "Where your data lives, how to run faster, how to watch a run, and the demo."
 date: "2026-07-27"
 ---
 # Safety, speed, and FAQ
@@ -30,6 +30,17 @@ alone.
 Every run captures everything by default, which is thorough but slower. Tick **faster run (less
 detail)** on the Run page. Greenroom then keeps the heavy artifacts, like video and trace, only
 when a check actually fails.
+
+## Can I watch the checks run?
+
+Yes. Tick **show the browser** on the Run page and a real browser window opens and clicks
+through your app while you watch. It is useful when a check fails and you want to see it
+happen rather than read the report afterwards.
+
+Two things to know. Checks run one at a time in this mode, so a full run takes longer than
+the normal invisible one. And the option only appears when you run Greenroom on your own
+machine: a Greenroom your company hosts has no screen to open a window on, so it always runs
+invisibly and hands you the video and screenshots instead.
 
 ## Can I look before I set anything up?
 

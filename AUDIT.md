@@ -19,9 +19,12 @@ Logins live only in the git-ignored `.env`. Nothing real in tracked files.
 # .env must be ignored, .env.example must be tracked — expect ".env" ignored
 grep -nE '(^|/)\.env($|\s)' .gitignore || echo "MISSING: .env not git-ignored"
 # no real-looking passwords hardcoded in tests/config — expect zero hits
-# (globs quoted so zsh doesn't abort on no-match; excludes CSS selectors like '#password',
-#  the data.password() generator ref, and saucedemo's intentionally-public demo password)
-grep -rnE "password\s*[:=]\s*['\"][^'\"]{3,}" tests config lib pages --include='*.ts' --include='*.js' | grep -viE "REPLACE_ME|getUser|placeholder|Selector|'#password'|data\.password|secret_sauce"
+# (globs quoted so zsh doesn't abort on no-match; excludes CSS selectors like #password,
+#  the data.password() generator ref, saucedemo's intentionally-public demo password, and the
+#  throwaway fixture password the platform integration tests create accounts with)
+# NOTE: match #password UNQUOTED — the old exclusion was written '#password', so the identical
+# double-quoted "#password" in lib/envs.ts DEFAULT_LOGIN_FORM reported as a finding forever.
+grep -rnE "password\s*[:=]\s*['\"][^'\"]{3,}" tests config lib pages --include='*.ts' --include='*.js' | grep -viE "REPLACE_ME|getUser|placeholder|Selector|#password|data\.password|secret_sauce|integration-pw"
 ```
 
 Pass: `.env` is ignored, `.env.example` exists with only blank/placeholder values, zero
@@ -155,8 +158,9 @@ test -e .npmrc && echo "UNEXPECTED: .npmrc is back" || echo "clean"
 Pass: every history-only path is a known, data-free deletion; no image in history shows a
 real deployment's data; the dependency scope resolves **anonymously** (a `401`/`404` means
 only token-holders can install — state that plainly in [README](README.md) rather than
-implying a clone Just Works); `.npmrc` carries the scope mapping but no token; `npm install`
-either works or is documented as broken with the reason.
+implying a clone Just Works); **no `.npmrc` is committed at all** (§8d — the scope resolves to
+npmjs by default, so the file is unnecessary and, with a token line, actively harmful); `npm
+install` either works or is documented as broken with the reason.
 
 Note on 8a/8b: the only real remedy is a history rewrite (`git filter-repo --path … --invert-paths`),
 which is free while the repo is private and coordination-expensive after it is public. Run

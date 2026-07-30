@@ -314,9 +314,9 @@ const millRoutes = createMillRoutes({
 });
 
 // --- CRUMB: guided tours (tours/*.md) — a read-only projection mounted at /crumb (both editions).
-// OPTIONAL dependency: if @tjakoen/crumb isn't installed the app still boots with tours simply
-// disabled (the head tags + routes go dark). Install with `bun add @tjakoen/crumb` (GitHub Packages,
-// needs GITHUB_TOKEN with read:packages — see .npmrc / DEPLOY.md). crumb-live.js resolves surfaces
+// @tjakoen/crumb IS a normal dependency now (on the public npm registry, no token needed), but the
+// import stays behind a variable specifier + try/catch so the app still boots with tours simply
+// disabled (head tags + routes go dark) if it's ever missing. crumb-live.js resolves surfaces
 // via `[data-surface="…"]` in the rendered pages; tours start on a `[data-crumb-start="<id>"]` click.
 let crumbRoutes: ((pathname: string) => Promise<Response | null>) | null = null;
 let crumbHead = "";
@@ -599,7 +599,7 @@ async function handle(req: Request): Promise<Response> {
     // row actually gets its turn (its own `resolveScopedUser`, since by then the HTTP request that
     // enqueued it is long gone). Demo mode never enqueues (read-only, no accounts to own a row).
     if (IS_DEMO) return okOr(denyInDemo, 409);
-    const { env, envs, light, files, grep, role } = await readBody(req);
+    const { env, envs, light, files, grep, role, headed } = await readBody(req);
     // Accept either `envs` (array — multi-env) or `env` (string — single). Response now carries
     // `runId` (subscribe to /api/stream?run=<runId> immediately — it's live from the moment the run
     // is queued, Gate D) + `position` (0 = starting now; N>0 = N runs ahead of it).
@@ -609,8 +609,11 @@ async function handle(req: Request): Promise<Response> {
     // LOCAL edition: no queue, no db — the legacy runner spawns Playwright directly (concurrency is
     // just the user's own single machine) and credentials come from .env in the child (users/
     // roles.ts), so there's no DB→child credential handoff to resolve. No `position` (never queued).
+    // `headed` ("Show the browser") is a LOCAL-only affordance — it opens a real window on the
+    // user's own screen. It is never forwarded to the queue below; startRun refuses it in platform
+    // anyway (lib/runner.ts StartRunOptions.headed), so this stays a single-edition path.
     if (IS_LOCAL) {
-      const res = startRun(envList, !!light, files, grep, role);
+      const res = startRun(envList, !!light, files, grep, role, { headed: !!headed });
       return json(res, res.ok ? 200 : 409);
     }
     if (!user) return json({ error: "unauthenticated" }, 401); // belt-and-suspenders — the session gate above already guarantees this in platform mode

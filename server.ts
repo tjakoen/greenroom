@@ -38,6 +38,7 @@ import {
   specFiles, recordedInputs, applyInputs,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
+import { exportTests, importTests, allSpecRels } from "./lib/tests-share.ts";
 import { canReadRun, canControlRun } from "./lib/run-scope.ts";
 import { startRun, stopRun as stopLegacy, killProc } from "./lib/runner.ts";
 import { enqueueRun, stopRun as stopQueuedRun, reconcileOnBoot, tick as tickQueue, listQueue, QueueFullError } from "./lib/run-queue.ts";
@@ -734,6 +735,31 @@ async function handle(req: Request): Promise<Response> {
   if (p === "/api/tests/rename" && method === "POST") {
     const { file, name } = await readBody(req);
     return okOr(renameTest(file, name));
+  }
+  // Share tests between users: export selected specs (or all) as one .zip carrying the spec files,
+  // the helpers they import, and their tests-meta.json entries; import merges such a zip back.
+  if (p === "/api/tests/export" && method === "GET") {
+    const filesParam = qp.get("files");
+    const rels = filesParam ? filesParam.split(",").map((s) => s.trim()).filter(Boolean) : allSpecRels();
+    const zip = exportTests(rels);
+    return new Response(new Uint8Array(zip), {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="greenroom-tests-${rels.length}.zip"`,
+      },
+    });
+  }
+  if (p === "/api/tests/import" && method === "POST") {
+    if (IS_DEMO) return okOr(denyInDemo, 409);
+    // The zip arrives base64 inside a JSON body (guardRequest only lets application/json POSTs
+    // through, its CSRF gate). Small test bundles, so base64 overhead is a non-issue.
+    const { zipB64, overwrite } = await readBody(req);
+    if (typeof zipB64 !== "string" || !zipB64) return json({ ok: false, error: "No file received." }, 400);
+    try {
+      return json(importTests(Buffer.from(zipB64, "base64"), { overwrite: !!overwrite }));
+    } catch (err: any) {
+      return json({ ok: false, error: `Could not read that zip: ${err?.message ?? String(err)}` }, 400);
+    }
   }
   if (p === "/api/test-meta" && method === "POST") {
     const { file, title, group, priority, owner, notes } = await readBody(req);

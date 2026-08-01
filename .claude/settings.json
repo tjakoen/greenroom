@@ -1,31 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git fetch *)",
-      "Bash(git rebase *)",
       "Bash(grep -n *)",
-      "Bash(GIT_EDITOR=true git rebase --continue)",
-      "Bash(GIT_EDITOR=true /usr/bin/git rebase --continue)",
-      "Bash(/usr/bin/git log *)",
-      "Bash(/usr/bin/git status *)",
-      "Bash(/usr/bin/git stash *)",
-      "Bash(/usr/bin/git diff *)",
-      "Bash(/usr/bin/git add *)",
-      "Bash(/usr/bin/git commit *)",
-      "Bash(/usr/bin/git push *)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "command -v graphify >/dev/null 2>&1 && nohup graphify update \"$CLAUDE_PROJECT_DIR\" >/dev/null 2>&1 &"
-          }
-        ]
-      }
+      "Bash(npm run *)",
+      "Bash(npx playwright *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
     ]
   }
 }

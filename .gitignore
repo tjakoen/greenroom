@@ -50,3 +50,8 @@ package-lock.json
 
 # graphify's generated code+doc graph — regenerable, host-local
 graphify-out/
+
+# Per-machine Claude Code settings (permission grants accreted while working,
+# absolute paths, personal hooks). The committed .claude/settings.json keeps only
+# the handful of rules that make sense for anyone working on this repo.
+.claude/settings.local.json

@@ -2,16 +2,17 @@
 // Ported from interface/server.js lines 341-391 (spec post-processing helpers),
 // 495-522 (preAuth) and 524-619 (startRecording).
 import { readFileSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { chromium } from "@playwright/test";
 import { resolveLoginForm, baseURLof, DEFAULT_LOGIN_FORM, envNames } from "./envs.ts";
 import { resolveCred } from "./creds.ts";
 import { loadRolesRaw } from "./roles.ts";
-import { parseTests, loadMeta, metaKey } from "./tests-lib.ts";
+import { injectLogin } from "./adapt.ts";
+import { setTestRole } from "./tests-lib.ts";
 import { recordingState, pushRecordingOutput, broadcastGlobal, publicState, getActiveRun } from "./run-stream.ts";
-import { ROOT, META_FILE, IS_DEMO, denyInDemo } from "./paths.ts";
+import { ROOT, IS_DEMO, denyInDemo } from "./paths.ts";
 
 export interface RecordResult {
   ok: boolean;
@@ -20,22 +21,18 @@ export interface RecordResult {
   out?: string;
 }
 
-// Rewrite a freshly-recorded codegen spec so login is AUTOMATED at run time:
-//  - point the import at our fixtures (adds capture + the `login` fixture), and
-//  - inject `await login('<role>')` as the first action of the test.
-// This targets codegen's known output shape (`async ({ page }) => {`); if a user
-// hand-changes that, the injection simply no-ops (login can be added by hand).
+// Rewrite a freshly-recorded codegen spec so login is AUTOMATED at run time: point the import at
+// our fixtures (adds capture + the `login` fixture), and inject `await login('<role>')` as the
+// first action of the test. A thin wrapper over lib/adapt.ts's injectLogin — the same transform
+// the Tests page's "Login" action runs on an imported spec — so there is exactly one
+// implementation of "wire a role's login into a spec" rather than two that can drift apart.
 function injectLoginIntoSpec(absPath: string, role: string): boolean {
   try {
-    let s = readFileSync(absPath, "utf8");
-    const before = s;
-    s = s.replace(/from ['"]@playwright\/test['"]/, "from './helpers/fixtures'");
-    s = s.replace(
-      /async\s*\(\s*\{\s*page\s*\}\s*\)\s*=>\s*\{/,
-      `async ({ page, login }) => {\n  await login('${role}');`,
-    );
-    if (s !== before) writeFileSync(absPath, s);
-    return s !== before;
+    const before = readFileSync(absPath, "utf8");
+    const rel = relative(ROOT, absPath).split(sep).join("/");
+    const result = injectLogin(before, rel, role);
+    if (result.changed) writeFileSync(absPath, result.code);
+    return result.changed;
   } catch {
     return false;
   }
@@ -62,21 +59,6 @@ function cleanRecordedSpec(absPath: string, baseURL: string | null | undefined):
     if (s !== before) writeFileSync(absPath, s);
   } catch {
     /* best effort — a hand-editable spec is still produced */
-  }
-}
-
-// Remember which role a recorded test logs in as (shown on the Tests page as
-// "runs as: <role>"), keyed to the first test title in the file.
-function setRecordedRole(outRel: string, role: string): void {
-  try {
-    const tests = parseTests(join(ROOT, outRel));
-    if (!tests.length) return;
-    const meta = loadMeta();
-    const key = metaKey(outRel, tests[0].title);
-    meta[key] = { ...(meta[key] || {}), role };
-    writeFileSync(META_FILE, JSON.stringify(meta, null, 2) + "\n");
-  } catch {
-    /* meta is best-effort */
   }
 }
 
@@ -223,7 +205,7 @@ export async function startRecording(env: string, name: string, role?: string): 
     cleanRecordedSpec(join(ROOT, out), url);
     if (roleName) {
       const injected = injectLoginIntoSpec(join(ROOT, out), roleName);
-      setRecordedRole(out, roleName);
+      setTestRole(out, roleName);
       pushRecordingOutput(
         injected
           ? `\nAdded automatic login as "${roleName}".`

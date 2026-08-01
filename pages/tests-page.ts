@@ -2,8 +2,9 @@
 // primitives (`.chips` chip-group, `.field__select` b-select, `.card`/`.field`/`.btn`/`.badge`)
 // that a thin client module (pages/tests.js) fills in and wires up. No data is baked in here —
 // everything the page shows comes from the SAME /api/{tests,recorded-inputs,apply-inputs,
-// test-tags,test-meta,tests/rename,roles,record,state} endpoints interface/app.js already uses
-// (byte-compat is the P3 gate: tests.js sends the identical request bodies).
+// test-signin,test-login,test-tags,test-meta,tests/rename,roles,record,state} endpoints
+// interface/app.js already uses (byte-compat is the P3 gate: tests.js sends the identical
+// request bodies) — test-signin/test-login are new (the Login action), added the same shape.
 //
 // Reproduces the old Tests surface (interface/app.js ~405-675: loadTests, renderSmartFilters,
 // renderTagFilters, filteredTests, renderTestGroups/testRow, toggleInputsEdit, toggleMetaEdit,

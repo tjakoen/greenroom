@@ -2,10 +2,12 @@
 // pages/tests.js — the thin client module behind /tests (P3). Plain, dependency-free browser
 // JS (no bundler, no TS) served as-is by server.ts, same pattern as pages/settings.js (P2) and
 // interface/app.js's own /app.js route. Talks to the SAME /api/{tests,recorded-inputs,
-// apply-inputs,test-tags,test-meta,tests/rename,roles,record,state} endpoints interface/app.js
-// uses (~405-675, ~1476-1495), with the SAME request bodies (byte-compat is the P3 gate) — this
-// file only changes how the results are RENDERED (grain markup, incl. the new chip-group +
-// b-select components, instead of the old SPA's bespoke pill/select classes).
+// apply-inputs,test-signin,test-login,test-tags,test-meta,tests/rename,roles,record,state}
+// endpoints interface/app.js uses (~405-675, ~1476-1495), with the SAME request bodies
+// (byte-compat is the P3 gate) — this file only changes how the results are RENDERED (grain
+// markup, incl. the new chip-group + b-select components, instead of the old SPA's bespoke
+// pill/select classes). test-signin/test-login are new: the Login action wires a Greenroom role
+// into an imported spec, the "fix" half of lib/adapt.ts's credential detection.
 (() => {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -168,6 +170,7 @@
       `<div class="gr-row-actions">` +
       `<button class="btn" data-size="sm" data-run="${esc(k)}">Run</button>` +
       `<button class="btn" data-size="sm" data-inputs="${esc(t.file)}" title="Make inputs dynamic" aria-label="Make inputs dynamic">Inputs</button>` +
+      `<button class="btn" data-size="sm" data-login="${esc(t.file)}" title="Sign in with a Greenroom role" aria-label="Sign in with a Greenroom role">Login</button>` +
       `<button class="btn" data-size="sm" data-edit="${esc(k)}" title="Tag / priority / owner" aria-label="Edit tags, priority, owner">Tags</button>` +
       `<button class="btn" data-size="sm" data-rename="${esc(t.file)}" title="Rename file" aria-label="Rename file">Rename</button>` +
       `<button class="btn" data-size="sm" data-status="danger" data-del="${esc(t.file)}" title="Delete file" aria-label="Delete file">Delete</button>` +
@@ -175,6 +178,7 @@
     li.querySelector('.gr-row-sel').onchange = (e) => { e.target.checked ? selectedKeys.add(k) : selectedKeys.delete(k); updateRunSelected(); };
     li.querySelector('[data-run]').onclick = () => runOne(t);
     li.querySelector('[data-inputs]').onclick = () => toggleInputsEdit(li, t);
+    li.querySelector('[data-login]').onclick = () => toggleLoginEdit(li, t);
     li.querySelector('[data-edit]').onclick = () => toggleMetaEdit(li, t);
     li.querySelector('[data-rename]').onclick = () => renameTest(t.file);
     li.querySelector('[data-del]').onclick = () => deleteTest(t.file);
@@ -220,6 +224,87 @@
       if (!r.ok) return toast(r.error || 'Could not update inputs.');
       toast(`Updated ${r.changed} input${r.changed === 1 ? '' : 's'} to generate fresh data each run.`);
       panel.remove();
+    };
+  }
+
+  // Build <option> tags for a role dropdown scoped to one environment, flagging any role missing
+  // a saved login for that env (" — no login set", same wording either caller uses). Shared by
+  // the record launcher's "Log in as" picker (populateRecordRoles) and the Login panel's role
+  // picker (toggleLoginEdit) so the two can't drift apart.
+  function roleOptionsForEnv(roles, env, selected) {
+    return (roles || [])
+      .filter((r) => (r.sites || []).some((s) => s.env === env))
+      .map((r) => {
+        const site = (r.sites || []).find((s) => s.env === env);
+        const ready = site && site.usernameSet && site.passwordSet;
+        return `<option value="${esc(r.name)}" ${r.name === selected ? 'selected' : ''}>${esc(r.label || r.name)}${ready ? '' : ' — no login set'}</option>`;
+      })
+      .join('');
+  }
+
+  // ---------------------------------------------------------------- Login (sign in as a role)
+  // The "fix" half of importing a foreign spec: lib/adapt.ts detects a hand-rolled sign-in but
+  // never rewrites it (guessing at credential code is worse than asking). This panel is where the
+  // user actually closes that gap — pick a role, and optionally drop the old sign-in lines it
+  // replaces.
+  async function toggleLoginEdit(li, t) {
+    const existing = li.nextElementSibling;
+    if (existing && existing.classList.contains('gr-panel')) { existing.remove(); return; }
+    const [data, roles] = await Promise.all([
+      api('/api/test-signin?file=' + encodeURIComponent(t.file)).catch(() => null),
+      api('/api/roles').catch(() => []),
+    ]);
+    const panel = document.createElement('div');
+    panel.className = 'gr-panel';
+    if (!data || !data.ok) {
+      panel.innerHTML =
+        '<p class="cat-intro">Could not read this check.</p>' +
+        '<div class="gr-panel-actions"><button class="btn" data-size="sm" id="li-cancel">Close</button></div>';
+      li.after(panel);
+      panel.querySelector('#li-cancel').onclick = () => panel.remove();
+      return;
+    }
+    const roleOpts = roleOptionsForEnv(roles, testsEnv, data.role);
+    if (!roleOpts) {
+      panel.innerHTML =
+        '<p class="cat-intro">No roles set up for this environment yet — add one under Settings → Roles and logins, then come back here.</p>' +
+        '<div class="gr-panel-actions"><button class="btn" data-size="sm" id="li-cancel">Close</button></div>';
+      li.after(panel);
+      panel.querySelector('#li-cancel').onclick = () => panel.remove();
+      return;
+    }
+    const intro = data.hasLogin
+      ? 'This check already signs in through Greenroom. Pick a role to change who it signs in as.'
+      : 'Greenroom will sign in before this check starts, using the role you pick below.';
+    const stepsIntro = data.steps.length
+      ? '<p class="cat-intro">These are the sign-in steps already in this check — Greenroom replaces them, so untick anything you want to keep.</p>'
+      : '';
+    const stepRows = data.steps.map((s) =>
+      `<label class="gr-step-row"><input type="checkbox" data-dropline="${s.index}" checked>` +
+      `<span>${esc(s.what)} <span class="cat-intro">— line ${s.line}: ${esc(s.text)}</span></span></label>`
+    ).join('');
+    panel.innerHTML =
+      `<p class="cat-intro">${intro}</p>` +
+      `<label class="field" data-size="sm"><span class="field__label">Sign in as</span>` +
+      `<select class="field__select" id="li-role">${roleOpts}</select></label>` +
+      stepsIntro + stepRows +
+      '<div class="gr-panel-actions"><button class="btn" data-size="sm" id="li-cancel">Cancel</button><button class="btn" data-size="sm" id="li-apply">Apply</button></div>';
+    li.after(panel);
+    panel.querySelector('#li-cancel').onclick = () => panel.remove();
+    panel.querySelector('#li-apply').onclick = async () => {
+      const role = panel.querySelector('#li-role').value;
+      if (!role) return toast('Pick a role first.');
+      const dropIndexes = [...panel.querySelectorAll('[data-dropline]:checked')].map((c) => Number(c.dataset.dropline));
+      const r = await api('/api/test-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file: t.file, role, dropIndexes }) });
+      if (!r.ok) return toast(r.error || 'Could not add sign-in.');
+      // `changed: false` means the check was left exactly as it was (nothing to wire the login
+      // into) — say so rather than claiming success; the reason is in the notice at the top.
+      if (r.attention && r.attention.length) showAdaptNotes([{ file: t.file, notes: r.attention }]);
+      toast(r.changed
+        ? `This check now signs in as "${role}".`
+        : 'Nothing was changed — see the note at the top of the page.');
+      panel.remove();
+      await loadTests();
     };
   }
 
@@ -395,14 +480,7 @@
     const sel = $('recordRole');
     if (!sel) return;
     const roles = await api('/api/roles').catch(() => []);
-    const forEnv = (roles || []).filter((r) => (r.sites || []).some((s) => s.env === testsEnv));
-    const opts = ['<option value="">No login (public pages)</option>'];
-    for (const r of forEnv) {
-      const site = (r.sites || []).find((s) => s.env === testsEnv);
-      const ready = site && site.usernameSet && site.passwordSet;
-      opts.push(`<option value="${esc(r.name)}">${esc(r.label || r.name)}${ready ? '' : ' — no login set'}</option>`);
-    }
-    sel.innerHTML = opts.join('');
+    sel.innerHTML = '<option value="">No login (public pages)</option>' + roleOptionsForEnv(roles, testsEnv);
   }
   async function recordTest(name) {
     const sel = $('recordRole');

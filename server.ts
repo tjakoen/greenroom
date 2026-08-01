@@ -35,7 +35,7 @@ import { rolesWithStatus, saveRole, deleteRole, seedRoles } from "./lib/roles.ts
 import { listGroups, saveGroup, deleteGroup } from "./lib/groups.ts";
 import {
   listTests, deleteTest, renameTest, saveMeta, saveTags, readResults,
-  specFiles, recordedInputs, applyInputs,
+  specFiles, recordedInputs, applyInputs, testSignIn, applyLogin,
 } from "./lib/tests-lib.ts";
 import { listRuns, collectRecords, findRecord } from "./lib/records.ts";
 import { exportTests, importTests, allSpecRels, adaptExisting } from "./lib/tests-share.ts";
@@ -520,10 +520,10 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ---- Tests (P3): server-rendered grain chip-group/b-select over the unchanged /api/{tests,
-  // recorded-inputs,apply-inputs,test-tags,test-meta,tests/rename,roles,record,state} endpoints
-  // below — tests.js (a thin client module) does the fetch + re-render. Run/Run selected/Run by
-  // tag hand off to the frozen SPA's Run page (still P4's to migrate) rather than triggering a
-  // run from here. ----
+  // recorded-inputs,apply-inputs,test-signin,test-login,test-tags,test-meta,tests/rename,roles,
+  // record,state} endpoints below — tests.js (a thin client module) does the fetch + re-render.
+  // Run/Run selected/Run by tag hand off to the frozen SPA's Run page (still P4's to migrate)
+  // rather than triggering a run from here. ----
   if (p === "/tests") return new Response(grainPage("Tests", testsBody(), { active: "tests" }), { headers: htmlHeaders });
   if (p === "/tests.js") return serveStatic(join(HERE, "pages", "tests.js"));
 
@@ -792,6 +792,17 @@ async function handle(req: Request): Promise<Response> {
     const { file, title, tags } = await readBody(req);
     return okOr(saveTags(file, title, tags));
   }
+  // The "fix" half of import's credential detection (lib/adapt.ts): what a spec's Login panel
+  // needs to render (already signs in? which role? which lines look hand-rolled), and the write
+  // that wires `await login('<role>')` in — same read/write split as recorded-inputs/apply-inputs
+  // above. Not platform-locked: like /api/tests/adapt, this writes a spec file, not flat-file
+  // config, so it's fine in both editions.
+  if (p === "/api/test-signin" && method === "GET") return okOr(testSignIn(String(qp.get("file") || "")));
+  if (p === "/api/test-login" && method === "POST") {
+    if (IS_DEMO) return okOr(denyInDemo, 409);
+    const { file, role, dropIndexes } = await readBody(req);
+    return okOr(applyLogin(file, role, Array.isArray(dropIndexes) ? dropIndexes : undefined));
+  }
   if (p === "/api/results") return json(readResults(qp.get("run") || "latest"));
 
   // ---- credentials / roles / groups ----
@@ -831,9 +842,20 @@ async function handle(req: Request): Promise<Response> {
 
   // ---- guide + onboarding (the SPA's own raw endpoints; MILL /guide is a separate human route) ----
   if (p === "/api/guide") {
+    if (qp.get("list")) return json({ ok: true, pages: await guideSource.list() });
     // Legacy raw-markdown endpoint — serve the current edition's start guide (see docs/guide/).
     const md = readFileMaybe(join(GUIDE_DIR, `${IS_PLATFORM ? "team" : "local"}.md`));
     return new Response(md || "# Guide\n\nGuide is missing.", { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+  }
+  // Raw markdown for ONE guide page, the counterpart of the human route /guide/<slug> (which
+  // renders the same doc through MILL). Reads through `guideSource`, so the path-traversal guard
+  // and the "never serve the other edition's start page" rule are the ones MILL already uses —
+  // there is no second copy of that logic to keep in step. `?list=1` on the bare endpoint gives
+  // the slugs, so a consumer never has to guess one.
+  if (p.startsWith("/api/guide/") && method === "GET") {
+    const md = await guideSource.read(p.slice("/api/guide/".length));
+    if (md == null) return new Response("No such guide page.", { status: 404 });
+    return new Response(md, { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
   }
   if (p === "/api/onboarding") return json(onboardingState());
 

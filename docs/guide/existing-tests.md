@@ -78,8 +78,10 @@ Two things are reported rather than changed, because guessing would be worse tha
 
 **A check that signs itself in.** If a script types a username and password directly, Greenroom
 tells you which check and which line, and leaves it alone. Make a role under **Roles & logins**,
-then set it as that check's role from the Tests page. Greenroom then fills in the right account for
-each site, and the password never sits inside a check.
+then open that check on the Tests page and press **Login**. Pick the role, and Greenroom shows you
+the sign-in steps it found so you can untick anything you want to keep, then it wires the check to
+sign in through your role and removes the ones you left ticked. Greenroom then fills in the right
+account for each site, and the password never sits inside a check.
 
 **A check that visits somebody else's website.** If a check goes to an address that is not one of
 your sites, that address is kept exactly as it is, because it is probably deliberate. Greenroom

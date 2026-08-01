@@ -42,8 +42,13 @@ grep -nE 'config/urls\.json' .gitignore || echo "MISSING: config/urls.json not g
 # safe public demo hosts (saucedemo powers the shipped @example specs)
 grep -oE "https?://[a-z0-9.-]+" config/urls.example.json | grep -viE "example\.com|saucedemo\.com" || echo "OK: only safe public hosts"
 # no hardcoded hosts in tests/lib/pages — expect zero (tests use relative paths;
-# the shipped @example specs use safe PUBLIC test sites by design, hence the allowlist)
-grep -rnE "https?://[a-z0-9.-]+\.[a-z]{2,}" tests lib pages config/environments.ts --include='*.ts' --include='*.js' | grep -viE "example\.com|localhost|playwright\.dev|nodejs\.org|code\.visualstudio|saucedemo\.com|wikipedia\.org|the-internet\.herokuapp\.com"
+# the shipped @example specs use safe PUBLIC test sites by design, hence the allowlist).
+# The allowlist also carries three non-hosts that read as hosts: `x.com` (the worked example in
+# lib/adapt.ts's longest-baseURL-first comment) and `evil.com`/`evil.example` (the attacker
+# origins the CSRF-guard tests assert against). All three are literals in code that exists to
+# talk ABOUT hosts, so they can never be a real environment leak — added 2026-08-01 after they
+# reported as findings on every run.
+grep -rnE "https?://[a-z0-9.-]+\.[a-z]{2,}" tests lib pages config/environments.ts --include='*.ts' --include='*.js' | grep -viE "example\.com|localhost|playwright\.dev|nodejs\.org|code\.visualstudio|saucedemo\.com|wikipedia\.org|the-internet\.herokuapp\.com|//x\.com|evil\.com|evil\.example"
 ```
 
 Pass: `urls.json` is ignored, the committed example/config hosts are only safe public demo

@@ -4,6 +4,8 @@ import { existsSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSyn
 import { join, relative, dirname, basename, sep } from "node:path";
 import { ROOT, TESTS_DIR, META_FILE, IS_DEMO, denyInDemo, validTestFile } from "./paths.ts";
 import { resultsDir, listRuns } from "./records.ts";
+import { findSignInSteps, injectLogin } from "./adapt.ts";
+import { loadRolesRaw } from "./roles.ts";
 
 // ------------------------------------------------------------- dynamic inputs
 // A recorded test replays literal values every time. Recording the same value
@@ -67,6 +69,41 @@ export function applyInputs(rel: unknown, mappings: { line: number; generator: s
   }
   writeFileSync(abs, out);
   return { ok: true, changed };
+}
+
+// ------------------------------------------------------------------- sign-in
+// The "fix" half of import's credential detection (lib/adapt.ts): once the user has made a role,
+// the Tests page's Login action lets them pick it and wire `await login('<role>')` into the spec
+// in place of whatever hand-rolled sign-in it arrived with. Same shape as recordedInputs/
+// applyInputs above — a read that shows the user what's there, a write that changes it.
+
+// What the Login panel needs to render: whether the spec already signs in through Greenroom, the
+// role it's recorded as running (if any), and the hand-rolled sign-in steps found in its source.
+export function testSignIn(rel: unknown): any {
+  if (!validTestFile(rel)) return { ok: false, error: "No such test file." };
+  const src = readFileSync(join(ROOT, rel), "utf8");
+  const tests = parseTests(join(ROOT, rel));
+  const meta = loadMeta();
+  const role = tests.length ? meta[metaKey(rel, tests[0].title)]?.role || null : null;
+  return { ok: true, file: rel, hasLogin: /\blogin\s*\(/.test(src), role, steps: findSignInSteps(src) };
+}
+
+// Wire `await login('<role>')` into a spec, optionally dropping the hand-rolled sign-in lines it
+// replaces (`dropIndexes`, 0-indexed against the source testSignIn's `steps` were computed from).
+// `role` must be a role the user has actually created — an unknown name is refused rather than
+// baked into the spec, since nothing would ever fill it in.
+export function applyLogin(rel: unknown, role: unknown, dropIndexes?: number[]): any {
+  if (IS_DEMO) return denyInDemo;
+  if (!validTestFile(rel)) return { ok: false, error: "No such test file." };
+  const roleName = String(role || "").trim();
+  if (!roleName || !loadRolesRaw()[roleName]) return { ok: false, error: "No such role." };
+  const abs = join(ROOT, rel);
+  const result = injectLogin(readFileSync(abs, "utf8"), rel, roleName, dropIndexes);
+  if (result.changed) {
+    writeFileSync(abs, result.code);
+    setTestRole(rel, roleName); // so the Tests row shows "runs as: <role>" immediately
+  }
+  return { ok: true, changed: result.changed, applied: result.applied, attention: result.attention };
 }
 
 // ---------------------------------------------------------- test library
@@ -226,6 +263,24 @@ export function saveMeta(file: string, title: string, fields: Record<string, any
   meta[key] = cur;
   writeFileSync(META_FILE, JSON.stringify(meta, null, 2) + "\n");
   return { ok: true };
+}
+
+// Remember which role a test logs in as (shown on the Tests page as "runs as: <role>"), keyed to
+// the first test title in the file. Shared by the record flow (lib/recorder.ts, right after a
+// fresh recording) and applyLogin above (right after injecting login into an imported spec) — one
+// implementation of "write the role into tests-meta.json" rather than two that can drift.
+export function setTestRole(rel: string, role: string): void {
+  if (IS_DEMO) return;
+  try {
+    const tests = parseTests(join(ROOT, rel));
+    if (!tests.length) return;
+    const meta = loadMeta();
+    const key = metaKey(rel, tests[0].title);
+    meta[key] = { ...(meta[key] || {}), role };
+    writeFileSync(META_FILE, JSON.stringify(meta, null, 2) + "\n");
+  } catch {
+    /* meta is best-effort */
+  }
 }
 
 // Rewrite a test's @tags. Tags are Playwright's convention — they live in the

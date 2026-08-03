@@ -253,3 +253,12 @@ the memory. Durable, repo-worthy rules belong *in this file*, not in memory.
   Keep `context/` and `*.example` files generic; real values live in git-ignored `urls.json`/`.env`/DB.
 - Run commands from the repo root.
 - Commit/push only when asked.
+- **No AI attribution trailers on commits** (`Co-Authored-By: Claude` and the like). The receipt for
+  "built with Claude" is the README badge + footer, not commit metadata — see the published
+  standards' commit convention (<https://tjakoen.github.io/standards>). Claude Code adds the trailer
+  by default, so it needs `"includeCoAuthoredBy": false` in `~/.claude/settings.json`; the rule is
+  repeated here because pointing at the standards index was not enough on its own (28 commits in
+  this repo carried the trailer before it was caught, and removing them meant rewriting published
+  history). Check with `git log -E --grep="^Co-Authored-By:" --oneline` before a push — anchor it to
+  the line start, or the pattern also matches docs (this bullet included) that merely *name* the
+  trailer, and a clean repo reports itself dirty.

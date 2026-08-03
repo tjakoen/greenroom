@@ -167,8 +167,12 @@ test -e .npmrc && echo "UNEXPECTED: .npmrc is back" || echo "clean"
 #     platform-UI screenshots (one showing two real employee email addresses) reachable from a local
 #     branch, and the naive read was "critical leak on a public repo". Scanning only remote refs
 #     showed zero touches — never pushed, so nothing was ever exposed. Same run also found the
-#     inverse: `careeredge`/`spark-uat` genuinely ARE in origin/main's history. Scan remote refs, and
-#     do it BEFORE concluding anything about severity.
+#     inverse: two of this repo's own historical brand strings genuinely ARE in origin/main's
+#     history, published and unfixable without a rewrite. Scan remote refs, and do it BEFORE
+#     concluding anything about severity.
+#     Note what is NOT written here: the strings themselves. An earlier draft of this very check
+#     named them, which is the §7 mistake (a brand grep that hardcodes the brands becomes the leak)
+#     committed inside the check written to catch it. Describe findings by shape, never by literal.
 #     FETCH AND PRUNE FIRST, and treat that as part of the check, not setup. Stale remote-tracking
 #     refs lie in BOTH directions, and the 2026-08-03 run hit the second one: a deleted-on-GitHub
 #     branch still present locally as refs/remotes/* was reported as "publishing two real internal

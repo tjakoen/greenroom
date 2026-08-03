@@ -12,8 +12,9 @@
 // is the opposite of what's wanted here: it settles before a second enqueue could ever be refused.
 //
 // The environment NAME is read from /api/state rather than hardcoded, because config/urls.json is
-// git-ignored and machine-specific — on CI it is seeded from config/urls.example.json, so a literal
-// like "demo-dev" would pass locally and fail there.
+// git-ignored and machine-specific — on CI it is seeded from config/urls.example.json, so any
+// hardcoded env name would pass on the machine it was written on and fail there. Hardcoding one
+// would also paste a real environment name into a public repo, which is its own problem.
 import { test, expect } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";

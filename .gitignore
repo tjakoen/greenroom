@@ -21,21 +21,26 @@ config/groups.json
 # Internal planning notes — kept locally, not part of the open-source repo.
 GRAIN-PLAN.md
 
+# Company-specific working docs (deployment pitches, tenant details, host names, real env names).
+# This repo is PUBLIC and ships generic by design (CLAUDE.md "Open source, stays generic"), so
+# anything naming a real company, tenant or host uses this suffix and stays out of git.
+*.local.md
+
 # Runtime SQLite db (data/greenroom.db + WAL/SHM). Shared runtime state, never committed.
 /data/
 
 # Dependencies
 node_modules/
 
-# Intentionally lockless: bun can't resolve greenroom's depth-2+ nested github
-# git-dep graph (greenroom -> pantry -> 4 layers) from scratch, so a committed
-# lock only goes stale/inconsistent and can't be regenerated (see package.json
-# "//dependencies" note + the bread-bun-nested-git blocker). Existing checkouts
-# run from node_modules/; do NOT try to regenerate a lock.
+# Lockfiles stay ignored — but NOT for the old reason. The original note here said bun could not
+# resolve a depth-2+ nested github git-dep graph (greenroom -> pantry -> 4 layers) so a lock could
+# never be regenerated. That blocker is GONE: @tjakoen/pantry was removed, the whole shared layer
+# is on public npmjs, and both `bun install` (82 pkgs) and `npm install` (83 pkgs) now resolve from
+# scratch against an empty HOME with no credentials. So a committed lock IS regenerable now, and
+# committing one would be a reasonable call for reproducibility — it is simply not the current
+# policy. Decide deliberately before changing it; do not "restore" it on the strength of the
+# stale reasoning that used to live here (audit 2026-08-03).
 bun.lock
-# npm can populate node_modules when bun install can't (it git-clones the nested
-# github deps instead of fetching codeload tarballs), but its lockfile is just as
-# stale/inconsistent as bun's here — don't commit it either.
 package-lock.json
 
 # Playwright output. Anchored to the repo root (leading /) so these DON'T also
@@ -50,6 +55,13 @@ package-lock.json
 
 # graphify's generated code+doc graph — regenerable, host-local
 graphify-out/
+
+# Editor-host scratch state. `.nimbalyst/transcript-images/` collects UI screenshots the
+# assistant captures while working — including captures of the PLATFORM edition showing real
+# account emails and internal environment names. Seventeen of them were committed by a
+# `git add .` in "Ready Greenroom for Use" (audit 2026-08-03); they never reached a remote,
+# but nothing stopped it happening. This rule is that stop. Never un-ignore it.
+.nimbalyst/
 
 # Per-machine Claude Code settings (permission grants accreted while working,
 # absolute paths, personal hooks). The committed .claude/settings.json keeps only

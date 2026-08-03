@@ -160,6 +160,41 @@ test -e .npmrc && echo "UNEXPECTED: .npmrc is back" || echo "clean"
 #       HOME=$(mktemp -d) bun install && bun run check
 ```
 
+```bash
+# 8f. WHAT IS ACTUALLY PUBLISHED. 8a/8b scan `git log --all`, which mixes local-only commits with
+#     pushed ones, so they answer "does this exist in my object store" — NOT "can a stranger read
+#     it". Those are different questions and the gap is not academic: the 2026-08-03 audit found 17
+#     platform-UI screenshots (one showing two real employee email addresses) reachable from a local
+#     branch, and the naive read was "critical leak on a public repo". Scanning only remote refs
+#     showed zero touches — never pushed, so nothing was ever exposed. Same run also found the
+#     inverse: `careeredge`/`spark-uat` genuinely ARE in origin/main's history. Scan remote refs, and
+#     do it BEFORE concluding anything about severity.
+#     FETCH AND PRUNE FIRST, and treat that as part of the check, not setup. Stale remote-tracking
+#     refs lie in BOTH directions, and the 2026-08-03 run hit the second one: a deleted-on-GitHub
+#     branch still present locally as refs/remotes/* was reported as "publishing two real internal
+#     specs", and a finding was written up and nearly acted on. The prune deleted three such refs
+#     and the finding evaporated. Confirm against the remote itself (`git ls-remote --heads origin`)
+#     before naming anything as published — remote-tracking refs are a local cache, not evidence.
+git fetch --all --prune
+git ls-remote --heads origin   # the authoritative list; compare it to refs/remotes/ below
+REMOTES=$(git for-each-ref --format='%(refname)' refs/remotes/)
+# every ref a stranger can read, not just origin/main — side branches are public too
+echo "$REMOTES"
+# images reachable from any remote ref — expect zero non-demo, non-docs/shots captures
+git log $REMOTES --pretty=format: --name-only | grep -iE '\.(png|jpg|jpeg|webp|gif)$' \
+  | grep -vE '^(demo/|docs/shots/)' | sort -u || echo "OK: none"
+# your own brand strings reachable from any remote ref — replace the alternation with yours
+for s in "<your-company>" "<your-app>" "<your-env-names>"; do
+  echo "$s -> $(git log $REMOTES --oneline -S"$s" 2>/dev/null | wc -l | tr -d ' ') commit(s) PUBLISHED"
+done
+```
+
+Pass: no image outside `demo/` + `docs/shots/` is reachable from any remote ref, and zero brand
+strings are. A hit here is **live and readable now** — treat it as an incident, not a cleanup task.
+A hit that only 8a/8b see (local, unpushed) is a near miss: add the `.gitignore` rule that would
+have stopped it and delete the branch, but nothing was exposed. **State which of the two you found
+— conflating them either cries wolf or waves a real leak through.**
+
 Pass: every history-only path is a known, data-free deletion; no image in history shows a
 real deployment's data; the dependency scope resolves **anonymously** (a `401`/`404` means
 only token-holders can install — state that plainly in [README](README.md) rather than

@@ -14,6 +14,15 @@ people use at once. This file is the deploy runbook.
 > trusted reverse proxy, not audited for direct public-internet exposure.** Defaults stay
 > loopback-locked; deployment is opt-in via the env vars below. Keep it on a private/company
 > network behind the proxy. See the security-review section below for what's covered vs residual.
+>
+> **The deployment-only gates are automated**, so they don't rely on someone remembering to try them
+> by hand: `lib/deploy-gates.test.ts` spawns a real network-configured server and asserts the
+> fail-closed boot refusals (missing/whitespace secrets, non-https `BETTER_AUTH_URL`, non-loopback
+> bind in the local edition, demo on an interface), the `ALLOWED_HOSTS` Host allowlist including the
+> empty-Host and `0.0.0.0` cases, and the sign-in rate limit with its per-client-IP bucketing. Run
+> `bun test lib` before any deploy. **Still unautomatable, so still manual:** TLS termination, the
+> proxy's own `X-Forwarded-For` overwrite behaviour, and SSE delivery through your proxy buffering
+> config — those are properties of the proxy, not of this app.
 
 ## Security review
 
@@ -30,7 +39,13 @@ What the platform already enforces (all opt-in via env, defaults unchanged for l
 - **Run isolation** — the Playwright child never inherits `SECRET_KEY`/`BETTER_AUTH_SECRET` (a
   user-authored spec can't exfiltrate them via its streamed output). The queue caps in-flight runs
   (global + per-user) and force-stops a run past `GR_RUN_TIMEOUT_MS` so it can't wedge a slot.
-- **Rate limiting** — 120 req/min global, 10/min on `sign-in`/`sign-up` (credential brute-force).
+- **Rate limiting — on `/api/auth/*` only, NOT app-wide.** 120 req/min, and 10/min on
+  `sign-in`/`sign-up` (credential brute-force). This is better-auth's own limiter
+  (`auth/index.ts` `rateLimit`), so it guards better-auth's routes and nothing else: `/api/run`,
+  `/api/tests`, the artifact endpoints and the rest are **unthrottled**. An earlier version of this
+  line said "120 req/min global", which read as app-wide — it never was. Pinned by
+  `lib/deploy-gates.test.ts` C3, which will fail the day an app-wide limiter lands (flip it then).
+  Authenticated abuse of the run endpoints is bounded by the queue caps below, not by a rate limit.
   Behind a proxy the app resolves the client IP from `x-forwarded-for` (only when `ALLOWED_HOSTS`
   is set) so the limit is per-client, not one shared bucket. **This is only safe if the proxy
   OVERWRITES `X-Forwarded-For` with the real client IP** (see the nginx config below) — an

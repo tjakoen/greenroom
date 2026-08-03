@@ -59,6 +59,19 @@ What the platform already enforces (all opt-in via env, defaults unchanged for l
   secrets redacted).
 
 Residual risk / must-do before exposure (do NOT skip):
+- **An account is equivalent to shell access on the host. This is the most important line in this
+  file.** A Playwright spec is arbitrary code, any signed-in user can write one in the in-browser
+  Editor, and the run queue executes it **as the server's own OS user with no sandbox** (`lib/runner.ts`
+  `spawn("npx", …, { cwd: ROOT, env: childEnv })` — no container, no uid change, no seccomp). So a
+  spec can read anything the server can: `data/greenroom.db` (every user row and every encrypted
+  credential), `.env`, `config/urls.json`, and any file on the volume. The `SECRET_KEY` /
+  `BETTER_AUTH_SECRET` env strip above raises the bar but does not close this: on Linux a child can
+  read its parent's environment via `/proc/<ppid>/environ` under the same uid, which recovers
+  `SECRET_KEY` and therefore decrypts every stored credential. **Only give accounts to people you
+  would already trust with a shell on that box.** The visibility scoping is for organisation and
+  accountability between colleagues, NOT a security boundary against a motivated account holder.
+  Closing it properly means running each spec in a container or as an unprivileged user with a
+  read-only mount, which the queue does not do today.
 - **Trusted proxy is assumed.** The app trusts `Host` + `X-Forwarded-For` from the proxy. Only run
   it behind a proxy you control that sets those correctly; never bind `0.0.0.0` without the proxy.
 - **In-memory rate limiter** — fine for the single-server model (plans/platform.md §6). A

@@ -61,7 +61,12 @@ test("NEVER carries env names, base URLs, run ids, test titles or logins", () =>
   // of this assertion was /passed|failed/i, which flagged the template's own sentence "if a check
   // failed" and made a correct body look like a leak.
   expect(body).not.toMatch(/\d{4}-\d{2}-\d{2}T[\d-]+-[a-z0-9-]+-(passed|failed)/i);
-  expect(body).not.toMatch(/password|secret|token/i);
+  // Credential check is scoped to the DIAGNOSTICS TABLE, not the whole body. A body-wide keyword ban
+  // cannot distinguish a leaked secret from prose ABOUT secrets: the attachment warning legitimately
+  // says "auth tokens", and an earlier version of this assertion failed on that. The table is the
+  // only part built from machine state, so it is the only part that could leak.
+  const table = body.slice(body.indexOf("| Greenroom |"));
+  expect(table).not.toMatch(/password|secret|token|=/i);
   expect(Object.keys(DIAG).sort()).toEqual(
     ["arch", "edition", "ffmpeg", "os", "runtime", "version"],
   );
@@ -75,8 +80,14 @@ test("stays inside a clickable URL length even if a field is absurd", () => {
   expect(() => new URL(url)).not.toThrow();
 });
 
-test("tells the reporter to check the bundle before attaching it", () => {
-  // GitHub has no attachment API, so the zip is a manual drag. The prompt to check it for private
-  // data is the only safeguard between a run's logs and a public issue.
-  expect(issueBody(DIAG)).toMatch(/check it for anything private/i);
+test("warns against attaching a real bundle, and says WHY in specific terms", () => {
+  // GitHub has no attachment API, so uploading is a manual act — the body text is the only thing
+  // standing between a trace and a public tracker. A soft "check it first" is not enough: a trace
+  // records request HEADERS, so it can carry live session cookies plus a DOM snapshot of every page.
+  // The warning has to name that, or a reporter reasonably assumes a bundle is just screenshots.
+  const body = issueBody(DIAG);
+  expect(body).toMatch(/DO NOT attach/);
+  expect(body).toMatch(/PUBLIC/);
+  expect(body).toMatch(/cookies|tokens/i);
+  expect(body).toMatch(/customer data/i);
 });

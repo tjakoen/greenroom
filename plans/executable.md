@@ -82,11 +82,15 @@ error: Cannot find module '@tjakoen/grain/styles/variables.css' from '/$bunfs/ro
 
 ## Risks and honest limits
 
-- **Unsigned.** macOS Gatekeeper says "cannot be opened because the developer cannot be verified";
-  Windows SmartScreen says "unrecognized app". The workaround (right-click → Open) is exactly the
-  kind of step this project exists to remove, so the README must walk a non-coder through it with a
-  screenshot. Signing properly costs an Apple Developer ID (99/yr) and a Windows OV cert (200-400/yr).
-  **Decide whether an unsigned download is genuinely better than the VS Code task before shipping it.**
+- **Unsigned — decided 2026-08-04: ship it unsigned.** macOS Gatekeeper will say "cannot be opened
+  because the developer cannot be verified" and Windows SmartScreen will say "unrecognized app".
+  Signing properly costs an Apple Developer ID (99/yr) and a Windows OV cert (200-400/yr), and that
+  is not worth it for this. The consequence is a **hard requirement, not a nice-to-have**: the
+  download page and README must walk a non-coder through the first-open warning with a screenshot
+  per platform (mac: right-click the app, choose Open, then Open again; Windows: More info, then Run
+  anyway). Ship that copy at the same time as the first binary. An unexplained OS warning is worse
+  than no executable, because it reads as "this software is unsafe" to exactly the audience this is
+  built for.
 - **Windows is unverifiable from a macOS dev machine.** Bun can cross-compile the binary, but nobody
   here can run it. The Windows half needs a real Windows check before release, and CI can build it
   but not meaningfully smoke-test the double-click flow.

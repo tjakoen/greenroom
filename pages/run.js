@@ -226,9 +226,20 @@
   // the regexes + matrixCols handling are load-bearing (the "chromium (<env>)" name format is a
   // documented contract, config/environments.ts + playwright.config.ts).
   function parseLine(line) {
-    const pass = /[✓✔]/.test(line);
-    const fail = /[✘✗×]/.test(line);
-    if (!pass && !fail) return;
+    // The status glyph must be at the START of the line. Playwright's list reporter formats a
+    // result as "  ✓  2 [chromium (staging)] › tests/x.spec.ts:10:5 › title (976ms)", but its
+    // failure DETAIL block uses a multiplication sign mid-line as a call-log repeat count:
+    // "        24 × locator resolved to <h1 class="heading">Welcome to the-internet</h1>".
+    // Testing for a bare × ANYWHERE (the original `/[✘✗×]/.test(line)`) matched that diagnostic
+    // too, so every failing run invented one phantom failed row and inflated the Failed/Total
+    // tiles — a 3-test, 1-failure run rendered as 4 total / 2 failed. The tiles self-corrected on
+    // reload (reconcileResults reads /api/results, which was always right), which is what let this
+    // survive: only a live run showed it. Anchoring to the leading glyph is the whole fix; keep the
+    // × in the class so a reporter that does lead with it still counts as a failure.
+    const glyph = line.match(/^\s*(?:\x1b\[[0-9;]*m\s*)*([✓✔✘✗×])/);
+    if (!glyph) return;
+    const pass = /[✓✔]/.test(glyph[1]);
+    const fail = !pass;
     const timeM = line.match(/\((\d+(?:\.\d+)?m?s)\)\s*$/);
     const time = timeM ? timeM[1] : '';
     let body = line.replace(/\((\d+(?:\.\d+)?m?s)\)\s*$/, '').trim();

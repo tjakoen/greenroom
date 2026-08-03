@@ -19,10 +19,13 @@ people use at once. This file is the deploy runbook.
 > by hand: `lib/deploy-gates.test.ts` spawns a real network-configured server and asserts the
 > fail-closed boot refusals (missing/whitespace secrets, non-https `BETTER_AUTH_URL`, non-loopback
 > bind in the local edition, demo on an interface), the `ALLOWED_HOSTS` Host allowlist including the
-> empty-Host and `0.0.0.0` cases, and the sign-in rate limit with its per-client-IP bucketing. Run
-> `bun test lib` before any deploy. **Still unautomatable, so still manual:** TLS termination, the
-> proxy's own `X-Forwarded-For` overwrite behaviour, and SSE delivery through your proxy buffering
-> config — those are properties of the proxy, not of this app.
+> empty-Host and `0.0.0.0` cases, and the sign-in rate limit with its per-client-IP bucketing.
+> `lib/queue-caps.test.ts` covers the sharing controls below: the per-user in-flight cap (including
+> that one user hitting their ceiling does **not** deny service to anyone else), the global cap
+> across users, and the `GR_RUN_TIMEOUT_MS` watchdog force-stopping a hung run and freeing its slot.
+> Run `bun test lib` before any deploy. **Still unautomatable, so still manual:** TLS termination,
+> the proxy's own `X-Forwarded-For` overwrite behaviour, and SSE delivery through your proxy
+> buffering config — those are properties of the proxy, not of this app.
 
 ## Security review
 

@@ -12,6 +12,9 @@ one-click **bug bundle** (trace + video + screenshots + logs).
 
 It never needs your app's source. You tell it the URLs and how to log in.
 
+**See it before you clone it:** [tjakoen.github.io/greenroom](https://tjakoen.github.io/greenroom)
+walks through what each screen does, with screenshots of it running.
+
 **Look before setting anything up:** `npm run demo` (or the VS Code task **🎬 Open Demo**) boots
 read-only against seeded example data: a populated dashboard with red and green results, zero
 config. A **Demo** badge appears and every write is disabled.

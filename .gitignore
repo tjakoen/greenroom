@@ -67,3 +67,7 @@ graphify-out/
 # absolute paths, personal hooks). The committed .claude/settings.json keeps only
 # the handful of rules that make sense for anyone working on this repo.
 .claude/settings.local.json
+
+# `bun build --compile` scratch files (see plans/executable.md). Regenerable, never committed.
+*.bun-build
+/dist/

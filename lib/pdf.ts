@@ -3,7 +3,11 @@
 // that Playwright already installed (no extra dependency).
 // Ported from interface/pdf.js.
 import { readFileSync } from "node:fs";
-import { chromium } from "@playwright/test";
+// `chromium` is imported DYNAMICALLY at its one call site, not here. A static import pulls
+// playwright-core into the module graph at build time, and playwright-core has optional deps
+// (chromium-bidi) that cannot be resolved by a bundler, which makes `bun build --compile` fail
+// outright. PDF export is a lazy, on-demand feature, so deferring the import costs nothing at
+// runtime and keeps a standalone binary buildable. Same reasoning in lib/recorder.ts.
 
 const esc = (s: unknown): string =>
   String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as Record<string, string>)[c]);
@@ -120,6 +124,8 @@ export function buildHtml(record: any, snapshotIndex: number, opts: BuildPdfOpts
 
 export async function buildPdf(record: any, snapshotIndex: number, opts: BuildPdfOpts = {}): Promise<Buffer> {
   const html = buildHtml(record, snapshotIndex, opts);
+  // Dynamic on purpose — see the note where the static import used to be, at the top of this file.
+  const { chromium } = await import("@playwright/test");
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();

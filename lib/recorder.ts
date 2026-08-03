@@ -5,7 +5,9 @@ import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
-import { chromium } from "@playwright/test";
+// `chromium` is imported DYNAMICALLY at its one call site below, not here: a static import drags
+// playwright-core (and its unresolvable optional chromium-bidi deps) into the build graph, which
+// breaks `bun build --compile`. Pre-auth is on-demand, so deferring it costs nothing. Same in lib/pdf.ts.
 import { resolveLoginForm, baseURLof, DEFAULT_LOGIN_FORM, envNames } from "./envs.ts";
 import { resolveCred } from "./creds.ts";
 import { loadRolesRaw } from "./roles.ts";
@@ -76,6 +78,8 @@ async function preAuth(env: string, role: string): Promise<{ ok: boolean; error?
   const form = resolveLoginForm(env);
   let browser;
   try {
+    // Dynamic on purpose — see the note where the static import used to be, at the top of this file.
+    const { chromium } = await import("@playwright/test");
     browser = await chromium.launch();
     const ctx = await browser.newContext({ baseURL: base });
     const page = await ctx.newPage();

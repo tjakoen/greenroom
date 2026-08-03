@@ -58,3 +58,19 @@ what a failure looks like. Use them to learn the app, then delete them once you 
 
 Yes. When you first open Greenroom, a welcome message offers a quick guided tour of the app. You
 can also start it any time from this guide.
+
+## Something is broken in Greenroom itself. How do I report it?
+
+Use **Report a Greenroom bug** at the bottom of the sidebar. It opens a new issue on Greenroom's
+GitHub page with the details already filled in: which version and edition you are running, your
+operating system, and which runtime. You write what happened, then submit it yourself.
+
+Nothing is sent anywhere until you press the button on GitHub, and the prefilled part deliberately
+carries no addresses, no environment names and no logins. Only facts about the software.
+
+If a check failed and you want to attach the evidence, export a bundle from **Report a bug** first,
+then drag that zip into the issue after you create it. Have a look inside it before you do, since it
+contains screenshots and logs from your own site.
+
+Note the two are different things. **Report a bug** is for problems in the site you are testing, and
+it builds a bundle for your developers. **Report a Greenroom bug** is for problems in this app.

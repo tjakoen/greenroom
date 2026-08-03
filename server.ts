@@ -11,6 +11,7 @@
 import { join, basename, dirname } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { release as osRelease } from "node:os";
 import { bunRuntime } from "@tjakoen/batch/platform/bun-runtime.ts";
 import { makeStatic } from "@tjakoen/batch/http/static.ts";
 import { createStyleBundle } from "@tjakoen/batch/assets/style-bundle.ts";
@@ -46,6 +47,18 @@ import { startRecording } from "./lib/recorder.ts";
 import { bugSummaryMd, buildBugBundle } from "./lib/bundle.ts";
 import { buildPdf } from "./lib/pdf.ts";
 import { resolveFfmpeg, clipStream } from "./lib/ffmpeg.ts";
+import { greenroomIssueUrl, type Diagnostics } from "./lib/report.ts";
+
+// Read once at boot for the bug-report diagnostics. package.json is inside ROOT, so this is the one
+// place that reads it at runtime; a missing/odd file must not stop the app booting over a version
+// string, hence the fallback.
+const APP_VERSION: string = (() => {
+  try {
+    return JSON.parse(readFileMaybe(join(ROOT, "package.json"))).version || "unknown";
+  } catch {
+    return "unknown";
+  }
+})();
 import { settingsBody } from "./pages/settings-page.ts";
 import { loginBody } from "./pages/login-page.ts";
 import { testsBody } from "./pages/tests-page.ts";
@@ -122,7 +135,7 @@ async function serveVs(req: Request, rel: string): Promise<Response> {
 // `local: true` = a LOCAL-edition-only destination (the flat-file Settings page — its panels are the
 // legacy config plane, which the platform edition replaces with Accounts/Environments/Admin).
 // Each edition drops the other's entries from the rail + ⌘K + search index; the rest is shared.
-const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean; platform?: boolean; local?: boolean }> = [
+const NAV: Array<{ key: string; label: string; href: string; icon: string; footer?: boolean; platform?: boolean; local?: boolean; external?: boolean }> = [
   { key: "run", label: "Run", href: "/run", icon: "loop" },
   { key: "tests", label: "Tests", href: "/tests", icon: "tasks" },
   { key: "editor", label: "Editor", href: "/editor", icon: "files" },
@@ -134,6 +147,10 @@ const NAV: Array<{ key: string; label: string; href: string; icon: string; foote
   // Plans is a footer link (developer/PROOF surface, not a primary task). Catalog is intentionally
   // NOT in the rail — it's the grain component gallery, served at /catalog but unlisted.
   { key: "plans", label: "Plans", href: "/plans", icon: "files", footer: true },
+  // External: 302s to a PREFILLED GitHub issue for GREENROOM itself (lib/report.ts). Distinct from
+  // "Report a bug" above, which is about the app under test and produces a bundle. `external` keeps
+  // it out of SHELL_PAGE_HREFS — an off-site href is not a page the catalog/search should index.
+  { key: "feedback", label: "Report a Greenroom bug", href: "/report-greenroom-bug", icon: "send", footer: true, external: true },
   { key: "admin", label: "Admin", href: "/admin", icon: "settings", footer: true, platform: true },
   { key: "settings", label: "Settings", href: "/settings", icon: "settings", footer: true, local: true },
 ];
@@ -141,9 +158,10 @@ const NAV: Array<{ key: string; label: string; href: string; icon: string; foote
 // local-only entries (Settings) hidden in platform.
 const VISIBLE_NAV = NAV.filter((n) => (IS_PLATFORM || !n.platform) && (IS_LOCAL || !n.local));
 // Every NAV destination is a real page as of P6 (no hash routes left to filter out) — kept as a
-// filter anyway so a future non-page NAV entry (an external link, say) can't leak into the
-// catalog's page-nav / component search index.
-const SHELL_PAGE_HREFS = VISIBLE_NAV.filter((n) => !n.href.includes("#")).map((n) => n.href);
+// filter anyway so a future non-page NAV entry can't leak into the catalog's page-nav / component
+// search index. `external: true` is that case arriving: /report-greenroom-bug is a 302 off-site, so
+// it is a rail item but NOT a page, and indexing it would put a GitHub redirect in the page search.
+const SHELL_PAGE_HREFS = VISIBLE_NAV.filter((n) => !n.href.includes("#") && !n.external).map((n) => n.href);
 
 const STYLESHEETS = [
   "/styles/variables.css", "/styles/global.css", "/styles/grain.css", "/styles/cmdk.css",
@@ -496,6 +514,23 @@ async function handle(req: Request): Promise<Response> {
   // rail destination. ----
   // PLATFORM only — the LOCAL edition has no accounts, so /login just bounces to the app.
   if (p === "/login") return IS_PLATFORM ? new Response(loginBody(), { headers: htmlHeaders }) : new Response(null, { status: 302, headers: { Location: "/run" } });
+
+  // "Report a Greenroom bug" — 302 to a PREFILLED GitHub issue (lib/report.ts). Built server-side
+  // because the diagnostics live here; sent as a redirect so the rail item stays a plain link and
+  // the query string is assembled (and length-capped) in one tested place. No token, nothing posted
+  // on the user's behalf: GitHub shows them its own form and they submit it themselves.
+  if (p === "/report-greenroom-bug") {
+    const diagnostics: Diagnostics = {
+      version: APP_VERSION,
+      edition: IS_DEMO ? "demo (read-only)" : IS_PLATFORM ? "platform (multi-user)" : "local (single-user)",
+      // release() only, never hostname() — a machine name is often "<person>s-MacBook-Pro".
+      os: `${process.platform} ${osRelease()}`,
+      arch: process.arch,
+      runtime: `Bun ${Bun.version}`,
+      ffmpeg: !!resolveFfmpeg(),
+    };
+    return new Response(null, { status: 302, headers: { Location: greenroomIssueUrl(diagnostics) } });
+  }
   if (p === "/login.js") return serveStatic(join(HERE, "pages", "login.js"));
 
   // ---- Settings: server-rendered grain forms over the flat-file /api/{envs,roles,creds,groups}

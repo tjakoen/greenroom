@@ -101,9 +101,13 @@ task run instead of crashing on a missing module.
 >    `grain` monorepo (`packages/*`) and the `batch` repo. There is **no `.npmrc` in this repo**,
 >    so the scope resolves to npmjs by default. Verified against an empty `HOME` with a purged
 >    cache: 82 packages, typechecks green, the shipped specs green, every page 200. (That check
->    once read "44/44 tests"; the repo now ships only the `@example` specs — a fresh clone runs 5,
->    of which one, `example-failure.spec.ts`, fails **on purpose** so a red run has something to
->    show, and one skips until you save a login. 4 green + 1 deliberate red is the healthy state.)
+>    once read "44/44 tests" — that figure is the `bun test lib` suite, not the specs.) **The healthy
+>    state of a fresh clone is `3 passed, 1 failed, 1 skipped`** (verified 2026-08-04 against a
+>    genuinely fresh clone). The failure is `example-failure.spec.ts` failing **on purpose**, so a red
+>    run has something to show; the skip is `login.spec.ts`, which skips until you save an `admin`
+>    login. An earlier version of this note said "4 green + 1 deliberate red", which counted the
+>    skipped spec as green — so anyone checking their clone against it saw "3 passed" and reasonably
+>    concluded something was broken.
 > 2. **Never commit an `.npmrc` with `_authToken=${GITHUB_TOKEN}`.** When the var is unset it
 >    resolves *empty* and overrides the user's valid `~/.npmrc` token, so every install 401s on a
 >    cold cache — invisible locally, fatal on a new machine.

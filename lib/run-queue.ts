@@ -308,13 +308,24 @@ export function tick(): void {
     return;
   }
   ticking = true;
-  void runTick().finally(() => {
-    ticking = false;
-    if (pendingTick) {
-      pendingTick = false;
-      tick();
-    }
-  });
+  // `.catch` before `.finally` is load-bearing, not defensive noise. runTick's body does DB reads
+  // and writes (countByStatus, claimNextQueued) with no try/catch of its own, and this call is
+  // deliberately fire-and-forget — so a transient SQLite failure (busy, locked, disk full) would
+  // reject an unawaited promise. Bun, like Node, treats an unhandled rejection as FATAL: the whole
+  // process exits, killing every in-flight run and disconnecting every signed-in user, because one
+  // queue tick hit a locked database. Contain it here: log it, let `finally` clear the re-entrancy
+  // lock, and let the next enqueue/stop/done drive another tick.
+  void runTick()
+    .catch((err) => {
+      console.error("[lib/run-queue.ts] tick failed — the queue survives, this tick did not:", err);
+    })
+    .finally(() => {
+      ticking = false;
+      if (pendingTick) {
+        pendingTick = false;
+        tick();
+      }
+    });
 }
 
 async function runTick(): Promise<void> {

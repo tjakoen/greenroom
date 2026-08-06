@@ -1057,6 +1057,24 @@ function shutdown() {
     }
   }
 }
+// Last-resort backstop. Bun (like Node) treats an unhandled rejection or an uncaught exception as
+// FATAL — verified: the process exits immediately, mid-request, with no shutdown. For a one-user
+// local tool that is arguably correct. For a shared instance it is not: one stray rejection in
+// background work (a queue tick, an SSE write to a client that vanished) would drop every in-flight
+// run and sign everyone out, and the user-visible symptom is "the site is down", with the cause a
+// line of output nobody was watching. Log loudly and keep serving instead.
+//
+// This is deliberately NOT a licence to ignore errors: anything that lands here is a bug that
+// escaped its own handler, so it prints in full. The request path already has its own try/catch in
+// Bun.serve's fetch, and the queue catches its own tick failures (lib/run-queue.ts) — this only
+// catches what those miss.
+process.on("unhandledRejection", (reason) => {
+  console.error("[server.ts] UNHANDLED REJECTION — kept the server alive, but this is a bug:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[server.ts] UNCAUGHT EXCEPTION — kept the server alive, but this is a bug:", err);
+});
+
 process.on("SIGINT", () => { shutdown(); process.exit(0); });
 process.on("SIGTERM", () => { shutdown(); process.exit(0); });
 process.on("exit", shutdown);

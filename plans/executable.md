@@ -41,6 +41,47 @@ dynamically at their single call site. Marking them `--external` is not optional
 MUST resolve from disk at runtime, because `@playwright/test` compiles the user's `.spec.ts` files
 when a run starts. Verified PDF export still produces a real 33KB PDF after the change.
 
+## The premise problem: a Bun binary does NOT remove the Node requirement
+
+Found 2026-08-04, after the compile spike, and it undercuts the main reason to build this at all.
+
+Playwright's test runner needs **Node**. `node_modules/playwright/cli.js` opens with
+`#!/usr/bin/env node`, and `lib/runner.ts` spawns `npx playwright test`. Running the CLI under Bun
+gets as far as `Version 1.61.1` and then fails compiling the config, because Playwright's own
+TypeScript transform does not engage under Bun:
+
+```
+$ bun node_modules/playwright/cli.js test --list
+error: Expected ";" but found "GrOptions"   (playwright.config.ts:23 — a plain type alias)
+```
+
+So a Bun-compiled executable removes the clone and the `bun install`, but leaves the user still
+needing Node, which was the main thing it was supposed to remove. Three options:
+
+1. **Ship a Node runtime inside the bundle** (+50-110MB). The only version that is genuinely
+   no-install. Bundle lands around 130MB, plus the 344MB Chromium fetch on first run.
+2. **Require Node.** Fatal for anyone who cannot install software; a modest convenience for someone
+   who simply does not want to deal with a repo.
+3. **Make the test runner work under Bun.** Fighting upstream on their transform pipeline. Not worth it.
+
+**Only option 1 is worth building.** If this gets picked up, that is the shape.
+
+## Is this worth doing at all?
+
+Worth re-deciding before spending the days, because the audience is narrower than it looks:
+
+- Producers who cannot install anything are **already served by the hosted Team edition** (a URL).
+- Developers can clone the repo.
+- That leaves people who can run a downloaded app but cannot install Node. Real, but narrow.
+
+And the catch: on a locked-down corporate machine, the policy that blocks installing Node usually
+also blocks running **unsigned** downloaded binaries, and unsigned is the decision taken below. So
+the executable risks being refused by exactly the machines that justify it, while the people who can
+run it could probably have installed Node anyway.
+
+Recommendation: rank this behind the deployment itself and behind Entra SSO. Not abandoned, but do
+not treat it as the answer to "someone cannot install software" — the hosted edition is that answer.
+
 **What cannot go inside the binary, ever:**
 - **Chromium** (344MB native). Fetched on first run.
 - **`@playwright/test` + `playwright` + `playwright-core`** (~17MB of real files). The test runner

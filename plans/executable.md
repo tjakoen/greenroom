@@ -9,9 +9,18 @@ owner: human
 
 # EXECUTABLE — ship Greenroom as a double-clickable app (2026-08-04)
 
-> **Status: spiked, not built.** The hard question is answered: `bun build --compile` DOES produce a
-> working binary for this codebase. The remaining work is bounded and listed below, with the exact
-> failure that stops it today. Decision taken: **portable, unsigned, Chromium fetched on first run.**
+> **Status: PARKED 2026-08-04, by decision, not by a blocker.** (Frontmatter stays `todo` because the
+> vocabulary is todo/doing/done/blocked and `blocked` would be wrong: nothing is waiting on anything,
+> this was deprioritised deliberately.) Ranked behind the real deployment and behind Entra SSO.
+>
+> The spike answered the hard question — `bun build --compile` DOES produce a working binary for this
+> codebase — but then answered a harder one badly: **a Bun binary does not remove the Node
+> requirement**, which was the whole point. See the premise section below before restarting this.
+> Decision taken if it ever resumes: **unsigned, Chromium fetched on first run, Node shipped in the
+> bundle.**
+>
+> Nothing here is wasted if it stays parked. The one code change it required (pulling Playwright out
+> of the boot graph, commit 7838c72) was worth making on its own merits and is already on main.
 
 ## Why
 

@@ -1,6 +1,7 @@
 # 🎭 Greenroom
 
 [![Made with Claude](https://img.shields.io/badge/Made_with-Claude-D97757?logo=anthropic&logoColor=white)](https://tjakoen.github.io/notes/ten-times-zero)
+[![CI](https://github.com/tjakoen/greenroom/actions/workflows/ci.yml/badge.svg)](https://github.com/tjakoen/greenroom/actions/workflows/ci.yml)
 ![Playwright](https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white)
 ![Bun](https://img.shields.io/badge/Bun-000000?logo=bun&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)

@@ -148,3 +148,10 @@ is what it reads.
   history). Check with `git log -E --grep="^Co-Authored-By:" --oneline` before a push — anchor it to
   the line start, or the pattern also matches docs (this bullet included) that merely *name* the
   trailer, and a clean repo reports itself dirty.
+- **Check what a file says with `git show origin/main:<path>`, never by reading the working tree.**
+  This checkout and the published repo drifted apart for two weeks without either side noticing,
+  because the local lineage was a pre-rewrite copy with no upstream tracking. The cost was a real
+  wrong answer: the 2026-08-18 audit recorded the README CI badge as fixed while the public README
+  still had no badge, because it read the file on disk. The working tree tells you what *you* have.
+  A stranger cloning the repo gets `origin/main`, so any claim about what this repo says in public
+  has to be read from there. Fetch first, since `origin/main` is only as fresh as your last fetch.

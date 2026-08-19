@@ -46,7 +46,7 @@ and how the two editions differ. Split out so the front door stays a one-minute 
   (2) **Platform** — multi-user deployment: better-auth accounts + sessions (the whole session gate),
   the SQLite DB (scoped/audited config, encrypted creds), the server-side **run queue**
   (`enqueueRun`), Accounts/Environments/Admin. **Opt in** with `GREENROOM_MODE=platform`, or
-  implicitly by setting `ALLOWED_HOSTS` (a real deployment is always platform — [DEPLOY.md](DEPLOY.md)).
+  implicitly by setting `ALLOWED_HOSTS` (a real deployment is always platform — [DEPLOY.md](../DEPLOY.md)).
   **Demo** (`GREENROOM_DEMO=1`) is a read-only *local* variant (no accounts, DB untouched).
   Recording uses a real browser on the user's screen (local-only — a headless deploy can't open a
   codegen window; refused on a deployed instance, Gate E). Both editions run from `bun server.ts`.
@@ -57,7 +57,7 @@ and how the two editions differ. Split out so the front door stays a one-minute 
 - **Open source, stays generic.** Still a generic starter — no data about any specific app under
   test, and no company/deployment specifics (company name, Entra tenant, host, `SECRET_KEY`), in
   committed files. The platform is deployable by any company; a given company's instance is
-  configured entirely via git-ignored config + env + the DB (see [plans/platform.md](plans/platform.md) §0.5).
+  configured entirely via git-ignored config + env + the DB (see [plans/platform.md](../plans/platform.md) §0.5).
   Keep `context/` and `*.example` files generic; real values live in git-ignored `urls.json`/`.env`/DB.
 - Run commands from the repo root.
 - Commit/push only when asked.

@@ -126,6 +126,16 @@ For anything a user touches, "works" means *driven the real flow*, not just type
 Run the alignment audit — **[AUDIT.md](AUDIT.md)** (no secrets committed, no real URLs
 committed, no app source, app boots, typecheck green). Fix findings in the same session.
 
+## Run reports
+
+A run closes with a report in **`artifacts/runs/`**, one file per run, named
+`YYYY-MM-DD-<slug>.md`. Its schema and the rule about pasting gate output verbatim are in
+[`artifacts/runs/README.md`](artifacts/runs/README.md). PANTRY reads that directory with no
+configuration, so nothing in `pantry.config.json` needs to name it.
+
+Do not put a run report in the top-level `runs/` directory. That one belongs to the app, holds
+recorded demo runs, and is gitignored.
+
 ## Memory
 
 Claude Code keeps per-project memories (decisions, preferences, context) outside the repo;

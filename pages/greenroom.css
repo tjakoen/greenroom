@@ -139,8 +139,6 @@
 .gr-run-status { font-size: var(--text-sm); padding: var(--space-1) var(--space-2); }
 .gr-run-status[data-commit="pending"] { border-left: 2px dashed var(--ink); padding-left: calc(var(--space-2) - 2px); }
 
-.gr-stat-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.gr-stat-row .stat { flex: 1 1 8rem; }
 
 #healthBar { margin-top: var(--space-4); }
 .gr-health-cap { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-muted); margin-top: var(--space-2); }

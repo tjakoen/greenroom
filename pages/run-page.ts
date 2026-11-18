@@ -61,7 +61,7 @@ export function runBody(): string {
   </section>
 
   <section class="card" data-pad="md" id="resultsCard" hidden>
-    <div class="gr-stat-row" id="statTiles"></div>
+    <div class="dash__kpis" id="statTiles"></div>
     <div class="meter" role="meter" aria-label="Run health" id="healthBar"></div>
     <div class="gr-health-cap" id="healthCap"></div>
     <div class="gr-env-health" id="envHealth"></div>

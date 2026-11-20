@@ -3,5 +3,6 @@
   "plansDir": "./plans",
   "docsDirs": [
     "./context"
-  ]
+  ],
+  "lifecycle": "held"
 }

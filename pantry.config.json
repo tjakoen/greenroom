@@ -4,5 +4,6 @@
   "docsDirs": [
     "./context"
   ],
-  "lifecycle": "held"
+  "lifecycle": "held",
+  "ownerLayer": true
 }

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mimeOf, safeResolve, serveFileRanged } from "./binary.ts";
+import { mimeOf, resolveRunTarget, safeResolve, serveFileRanged } from "./binary.ts";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -19,6 +19,24 @@ test("safeResolve blocks traversal + sibling-prefix escapes", () => {
 
 const fp = join(tmpdir(), `gr-binary-spike-${process.pid}.bin`);
 await Bun.write(fp, new Uint8Array(Array.from({ length: 1000 }, (_, i) => i % 256)));
+
+test("resolveRunTarget scopes on the RESOLVED run, not the raw first segment", () => {
+  const root = "/a/runs";
+  // The ordinary case.
+  expect(resolveRunTarget(root, "own/index.html")).toEqual({ target: "/a/runs/own/index.html", runId: "own" });
+  expect(resolveRunTarget(root, "own/")).toEqual({ target: "/a/runs/own/index.html", runId: "own" });
+  expect(resolveRunTarget(root, "own")).toEqual({ target: "/a/runs/own/index.html", runId: "own" });
+  // The bug: the raw first segment says "own" and the resolved one says "other", so the scope
+  // check must read "other" or a private run is served to anyone who can name their own.
+  expect(resolveRunTarget(root, "own/../other/index.html")).toEqual({
+    target: "/a/runs/other/index.html",
+    runId: "other",
+  });
+  // Escapes and malformed escapes are refused outright.
+  expect(resolveRunTarget(root, "../escape")).toBeNull();
+  expect(resolveRunTarget(root, "own/../../etc/passwd")).toBeNull();
+  expect(resolveRunTarget(root, "own/%")).toBeNull();
+});
 
 test("full request serves all bytes (200)", async () => {
   const r = await serveFileRanged(new Request("http://x/f"), fp, "application/octet-stream");

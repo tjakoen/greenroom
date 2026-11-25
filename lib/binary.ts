@@ -4,7 +4,7 @@
 // Bun.file, which preserves bytes. Range support is what makes <video> scrubbing/seeking
 // work: the browser sends `Range` and expects a 206 partial + Content-Range. Ported from
 // interface/server.js serveRanged (fs.createReadStream → Bun.file.slice) with the same math.
-import { normalize, resolve, join, sep, extname } from "node:path";
+import { normalize, resolve, join, relative, sep, extname } from "node:path";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
@@ -23,6 +23,30 @@ export function safeResolve(root: string, rel: string): string | null {
   const fp = resolve(normalize(join(base, rel)));
   if (fp !== base && !fp.startsWith(base + sep)) return null;
   return fp;
+}
+
+/** Resolve a /runs/ URL path to its target and the run id it actually lands in.
+ *
+ *  Resolution happens BEFORE the run id is read, on purpose: the previous code checked scope on
+ *  the raw first segment, so "own-run/../other-run/index.html" passed the check as "own-run" and
+ *  then safeResolve normalised it into a sibling run, serving artifacts the caller may not read.
+ *  The first segment of the RESOLVED path is the only one that names the directory being served. */
+export function resolveRunTarget(
+  root: string,
+  urlPath: string,
+): { target: string; runId: string } | null {
+  let rel: string;
+  try {
+    rel = decodeURIComponent(urlPath);
+  } catch {
+    return null; // a malformed escape is not a path we can scope
+  }
+  if (rel === "" || rel.endsWith("/")) rel += "index.html";
+  if (!rel.includes("/")) rel += "/index.html";
+  const target = safeResolve(root, rel);
+  if (!target) return null;
+  const runId = relative(resolve(root), target).split(sep)[0];
+  return runId ? { target, runId } : null;
 }
 
 /** Serve a file with byte-preserving reads + HTTP Range support (200 / 206 / 416), 404 when

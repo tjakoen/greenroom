@@ -22,7 +22,7 @@ import { createProofRoutes } from "@tjakoen/proof/routes.ts";
 import { createCatalog } from "@tjakoen/grain/catalog/catalog.ts";
 
 import { guardRequest } from "./lib/guard.ts";
-import { serveFileRanged, safeResolve, mimeOf } from "./lib/binary.ts";
+import { serveFileRanged, safeResolve, resolveRunTarget, mimeOf } from "./lib/binary.ts";
 import { ROOT, PORT, IS_DEMO, IS_PLATFORM, IS_LOCAL, readFileMaybe, denyInDemo } from "./lib/paths.ts";
 import { runAppMigrations } from "./db/index.ts";
 import { auth, runAuthMigrations, getSessionUser } from "./auth/index.ts";
@@ -905,13 +905,12 @@ async function handle(req: Request): Promise<Response> {
     return serveStatic(target);
   }
   if (p.startsWith("/runs/")) {
-    let rel = decodeURIComponent(p.slice("/runs/".length));
-    if (IS_PLATFORM && user && !canReadRun(user, rel.split("/")[0])) return new Response("Forbidden", { status: 403 }); // audit #2 (first path seg = run dir)
-    if (rel === "" || rel.endsWith("/")) rel += "index.html";
-    if (!rel.includes("/")) rel += "/index.html";
-    const target = safeResolve(RUNS_DIR, rel);
-    if (!target) return new Response("Forbidden", { status: 403 });
-    return serveStatic(target);
+    // Resolve first, scope second. Checking the raw first segment let "own/../other/x" pass as
+    // "own" and then land in "other" after normalisation (audit 2026-11-25, blocker).
+    const resolved = resolveRunTarget(RUNS_DIR, p.slice("/runs/".length));
+    if (!resolved) return new Response("Forbidden", { status: 403 });
+    if (IS_PLATFORM && user && !canReadRun(user, resolved.runId)) return new Response("Forbidden", { status: 403 });
+    return serveStatic(resolved.target);
   }
 
   return new Response("Not found", { status: 404 });
